@@ -1,3 +1,14 @@
+import {
+    enterClassroom,
+    requestTeacherHelp,
+    saveStudentProgress,
+    signInStudent,
+    trackStudentPresence,
+    updateStudentProfile,
+    watchClassControl,
+    watchHelpRequest
+} from './supabase.js';
+
 (function () {
     const PREVIEW_STYLES = `
         <style>
@@ -13,6 +24,12 @@
         editor: null,
         currentSession: 'sesion1',
         studentName: '',
+        studentAvatar: '🦊',
+        studentId: '',
+        presenceSubscription: null,
+        progress: {},
+        classControl: { active: false },
+        classControlSubscription: null,
         state: {},
         loadingSession: false,
 
@@ -21,6 +38,7 @@
                 document.getElementById('code-editor'),
                 () => this.handleCodeChange()
             );
+            this.editor.setOption('readOnly', true);
             const selector = document.getElementById('session-selector');
             SessionRegistry.catalog.forEach(session => {
                 const option = document.createElement('option');
@@ -28,11 +46,30 @@
                 option.textContent = session.title;
                 selector.appendChild(option);
             });
-            selector.addEventListener('change', event => {
-                this.loadSession(event.target.value).catch(error => this.showError(error));
-            });
+            selector.disabled = true;
             LabEditor.initResizer();
             this.loadSession('sesion1').catch(error => this.showError(error));
+        },
+
+        async initializeSupabase() {
+            if (this.classControlSubscription) return;
+            this.classControlSubscription = watchClassControl(control => {
+                const sessionChanged = control.sessionId && control.sessionId !== this.currentSession;
+                this.classControl = control;
+                document.getElementById('practice-status').textContent = control.active
+                    ? `Práctica en curso: ${SessionRegistry.catalog.find(session => session.id === control.sessionId)?.title || control.sessionId}`
+                    : 'La práctica todavía no ha comenzado. Espera a que el docente la inicie.';
+                document.getElementById('practice-status').className = control.active
+                    ? 'bg-green-600/20 text-green-300 px-4 py-2 text-center'
+                    : 'bg-amber-600/20 text-amber-200 px-4 py-2 text-center';
+                this.editor.setOption('readOnly', !this.studentId || !control.active);
+                document.getElementById('reset-button').disabled = !this.studentId || !control.active;
+                if (this.studentId) {
+                    updateStudentProfile(this.studentId, { sessionId: control.sessionId || 'sesion1' })
+                        .catch(error => this.showError(error));
+                }
+                if (sessionChanged) this.loadSession(control.sessionId).catch(error => this.showError(error));
+            }, error => this.showError(error));
         },
 
         async loadSession(sessionId) {
@@ -40,7 +77,7 @@
             try {
                 const session = await SessionRegistry.load(sessionId);
                 this.currentSession = session.id;
-                this.state = Object.fromEntries(session.missions.map(mission => [mission.id, false]));
+                this.state = Object.fromEntries(session.missions.map(mission => [mission.id, Boolean(this.progress[session.id]?.[mission.id])]));
                 document.getElementById('session-selector').value = session.id;
                 document.getElementById('sidebar-title').textContent = session.title;
 
@@ -56,6 +93,9 @@
                 `).join('');
                 document.getElementById('success-banner').classList.add('hidden');
                 this.editor.setValue(session.baseHTML);
+                session.missions.forEach(mission => {
+                    if (this.state[mission.id]) this.markMissionComplete(mission.id);
+                });
                 this.updateRankUI();
             } finally {
                 this.loadingSession = false;
@@ -63,7 +103,7 @@
         },
 
         handleCodeChange() {
-            if (this.loadingSession) return;
+            if (this.loadingSession || !this.studentId || !this.classControl.active) return;
             const code = this.editor.getValue();
             this.updateIframe(code);
             this.validateMissions(code);
@@ -89,8 +129,10 @@
                     }
                 });
                 if (changed) {
+                    this.progress[this.currentSession] = { ...this.state };
                     this.updateRankUI();
-                    this.saveToCloud();
+                    saveStudentProgress(this.studentId, this.currentSession, this.progress[this.currentSession])
+                        .catch(error => this.showError(error));
                 }
             }).catch(error => this.showError(error));
         },
@@ -110,6 +152,9 @@
             const total = Object.keys(this.state).length;
             const completed = Object.values(this.state).filter(Boolean).length;
             const badge = document.getElementById('level-badge');
+            const points = Object.values(this.progress)
+                .reduce((sum, sessionProgress) => sum + Object.values(sessionProgress || {}).filter(Boolean).length, 0) * 10;
+            document.getElementById('points-badge').textContent = `Puntos: ${points}`;
             const percent = total ? completed / total : 0;
             if (percent === 0) badge.textContent = 'Rango: Novato 🥚';
             else if (percent < 0.5) badge.textContent = 'Rango: Aprendiz 🐥';
@@ -121,7 +166,13 @@
         },
 
         resetSession() {
-            this.loadSession(this.currentSession).catch(error => this.showError(error));
+            if (!this.studentId || !this.classControl.active) return;
+            const sessionId = this.currentSession;
+            this.progress[sessionId] = {};
+            this.loadSession(sessionId).then(() => {
+                this.state = Object.fromEntries(Object.keys(this.state).map(missionId => [missionId, false]));
+                return saveStudentProgress(this.studentId, sessionId, this.state);
+            }).catch(error => this.showError(error));
         },
 
         exportCode() {
@@ -135,7 +186,7 @@
             window.setTimeout(() => URL.revokeObjectURL(url), 1000);
         },
 
-        loginStudent() {
+        async loginStudent() {
             const name = document.getElementById('student-name').value.trim();
             if (!name) {
                 document.getElementById('student-error').classList.remove('hidden');
@@ -143,23 +194,62 @@
                 return;
             }
             document.getElementById('student-error').classList.add('hidden');
-            this.studentName = name;
-            document.getElementById('login-modal').classList.add('hidden');
-            this.saveToCloud();
+            try {
+                this.studentAvatar = document.getElementById('student-avatar').value;
+                const user = await signInStudent();
+                this.studentId = user.uid;
+                this.studentName = name;
+                const student = await enterClassroom(user, name, this.studentAvatar);
+                this.progress = student.progress || {};
+                await updateStudentProfile(user.uid, { sessionId: this.classControl.sessionId || 'sesion1' });
+                await this.initializeSupabase();
+                this.presenceSubscription?.();
+                this.presenceSubscription = await trackStudentPresence(user, {
+                    name,
+                    avatar: this.studentAvatar,
+                    sessionId: this.classControl.sessionId || 'sesion1'
+                });
+                document.getElementById('login-modal').classList.add('hidden');
+                document.getElementById('student-identity').textContent = `${this.studentAvatar} ${name}`;
+                document.getElementById('student-login-error').classList.add('hidden');
+                this.editor.setOption('readOnly', !this.classControl.active);
+                document.getElementById('reset-button').disabled = !this.classControl.active;
+                this.loadSession(this.classControl.sessionId || 'sesion1').catch(error => this.showError(error));
+                watchHelpRequest(user.uid, request => {
+                    const message = document.getElementById('help-response');
+                    if (request?.teacherMessage) {
+                        message.textContent = `Respuesta del docente: ${request.teacherMessage}`;
+                        message.classList.remove('hidden');
+                    } else {
+                        message.classList.add('hidden');
+                    }
+                    document.getElementById('help-button').disabled = Boolean(request?.status);
+                    document.getElementById('help-button').textContent = request?.status === 'answered'
+                        ? 'El docente respondió'
+                        : request?.status === 'pending'
+                            ? 'Solicitud enviada'
+                            : 'Pedir ayuda al docente';
+                }, error => this.showError(error));
+            } catch (error) {
+                const loginError = document.getElementById('student-login-error');
+                loginError.textContent = `No se pudo conectar: ${error.message}`;
+                loginError.classList.remove('hidden');
+            }
         },
 
-        saveToCloud() {
-            if (!this.studentName) return;
-            const payload = {
-                name: this.studentName,
-                session: this.currentSession,
-                state: this.state,
-                lastUpdate: new Date().toLocaleTimeString()
-            };
+        async askForHelp() {
+            if (!this.studentId) return;
+            const answer = window.prompt('¿En qué necesitas ayuda? (opcional)', '');
+            if (answer === null) return;
+            const message = (answer.trim() || 'Necesito ayuda con la práctica.').slice(0, 300);
             try {
-                LabDB.saveStudent(payload);
+                await requestTeacherHelp(this.studentId, {
+                    name: this.studentName,
+                    avatar: this.studentAvatar,
+                    message
+                });
             } catch (error) {
-                this.showError(new Error(`No se pudo guardar el progreso local: ${error.message}`));
+                this.showError(error);
             }
         },
 
