@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Panel Docente | Academia Web</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="css/estilos.css" rel="stylesheet">
+    <style>
+        body { height: auto; min-height: 100vh; display: block; }
+    </style>
+</head>
+<body>
+    <main class="max-w-5xl mx-auto">
+        <header class="flex justify-between items-center mb-6 border-b border-slate-700 pb-4">
+            <h1 class="text-3xl font-bold text-white"><i class="fa-solid fa-chalkboard-user"></i> Panel de Monitoreo</h1>
+            <a href="laboratorio_html_en_vivo.html" class="bg-slate-600 px-4 py-2 rounded text-white">Volver al laboratorio</a>
+        </header>
+
+        <section id="teacher-login" class="modal-box mx-auto">
+            <h2 class="text-2xl font-bold text-white mb-2">Acceso Docente</h2>
+            <label class="sr-only" for="teacher-pass">Contraseña</label>
+            <input type="password" id="teacher-pass" class="w-full p-3 my-4 rounded border border-slate-600 bg-slate-800 text-white" placeholder="Contraseña...">
+            <p id="login-error" class="hidden text-red-400 text-sm mb-3" role="alert">Contraseña incorrecta.</p>
+            <button onclick="TeacherPanel.login()" class="w-full bg-red-500 text-white p-3 rounded font-bold">Acceder</button>
+        </section>
+
+        <section id="teacher-dashboard" class="hidden">
+            <div id="students-grid" class="grid grid-cols-1 md:grid-cols-3 gap-4"></div>
+        </section>
+    </main>
+
+    <script src="js/core/db.js"></script>
+    <script src="js/core/teacher.js"></script>
+</body>
+</html>
