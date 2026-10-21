@@ -10,6 +10,12 @@ import {
 } from './supabase.js';
 
 (function () {
+    function countCompleted(value) {
+        if (value === true) return 1;
+        if (!value || typeof value !== 'object') return 0;
+        return Object.values(value).reduce((total, child) => total + countCompleted(child), 0);
+    }
+
     const PREVIEW_STYLES = `
         <style>
             body { font-family: 'Segoe UI', sans-serif; padding: 20px; line-height: 1.6; }
@@ -23,6 +29,8 @@ import {
     window.SystemApp = {
         editor: null,
         currentSession: 'sesion1',
+        currentProject: '',
+        currentProjectData: null,
         studentName: '',
         studentAvatar: '🦊',
         studentId: '',
@@ -47,6 +55,9 @@ import {
                 selector.appendChild(option);
             });
             selector.disabled = true;
+            document.getElementById('project-selector').addEventListener('change', event => {
+                this.loadSession(this.currentSession, event.target.value).catch(error => this.showError(error));
+            });
             LabEditor.initResizer();
             this.loadSession('sesion1').catch(error => this.showError(error));
         },
@@ -72,17 +83,59 @@ import {
             }, error => this.showError(error));
         },
 
-        async loadSession(sessionId) {
+        async loadSession(sessionId, projectId = '') {
             this.loadingSession = true;
             try {
                 const session = await SessionRegistry.load(sessionId);
                 this.currentSession = session.id;
-                this.state = Object.fromEntries(session.missions.map(mission => [mission.id, Boolean(this.progress[session.id]?.[mission.id])]));
+                const projectSelector = document.getElementById('project-selector');
+                const projectSelectorWrapper = document.getElementById('project-selector-wrapper');
+                let missions = session.missions;
+                let baseHTML = session.baseHTML;
+                this.currentProjectData = null;
+
+                if (session.projects) {
+                    projectSelectorWrapper.classList.remove('hidden');
+                    projectSelector.replaceChildren();
+                    session.projects.forEach(project => {
+                        const option = document.createElement('option');
+                        option.value = project.id;
+                        option.textContent = project.title;
+                        projectSelector.appendChild(option);
+                    });
+                    const selectedProject = session.projects.find(project => project.id === projectId)
+                        || session.projects.find(project => project.id === this.currentProject)
+                        || session.projects[0];
+                    this.currentProject = selectedProject.id;
+                    this.currentProjectData = selectedProject;
+                    projectSelector.value = selectedProject.id;
+                    missions = selectedProject.missions;
+                    baseHTML = selectedProject.baseHTML;
+                    document.getElementById('project-description').textContent = selectedProject.description;
+                    document.getElementById('project-description').classList.remove('hidden');
+                    document.getElementById('sidebar-title').textContent = session.title;
+                } else {
+                    projectSelectorWrapper.classList.add('hidden');
+                    document.getElementById('project-description').classList.add('hidden');
+                    this.currentProject = '';
+                    document.getElementById('sidebar-title').textContent = session.title;
+                }
+
+                const storedSessionProgress = this.progress[session.id] || {};
+                const storedProjectProgress = this.currentProjectData
+                    ? storedSessionProgress[this.currentProject] || (this.currentProject === 'primera-pagina' ? storedSessionProgress : {})
+                    : storedSessionProgress;
+                this.state = Object.fromEntries(missions.map(mission => [
+                    mission.id,
+                    Boolean(storedProjectProgress[mission.id])
+                ]));
                 document.getElementById('session-selector').value = session.id;
-                document.getElementById('sidebar-title').textContent = session.title;
+                document.getElementById('editor-project-hint').textContent = this.currentProjectData
+                    ? `Proyecto: ${this.currentProjectData.title.replace(/^\d+\.\s*/, '')}`
+                    : `Práctica: ${session.title}`;
 
                 const container = document.getElementById('missions-container');
-                container.innerHTML = session.missions.map((mission, index) => `
+                container.innerHTML = missions.map((mission, index) => `
                     <div class="mission-item bg-slate-800 rounded" id="mission-ui-${mission.id}">
                         <div class="font-bold text-white text-sm flex items-center mb-1">
                             <span class="w-6 h-6 rounded-full bg-slate-700 flex items-center justify-center mr-2 text-xs" id="icon-${mission.id}"><i class="fa-solid fa-lock"></i></span>
@@ -92,8 +145,9 @@ import {
                     </div>
                 `).join('');
                 document.getElementById('success-banner').classList.add('hidden');
-                this.editor.setValue(session.baseHTML);
-                session.missions.forEach(mission => {
+                this.editor.setValue(baseHTML);
+                this.updateIframe(baseHTML);
+                missions.forEach(mission => {
                     if (this.state[mission.id]) this.markMissionComplete(mission.id);
                 });
                 this.updateRankUI();
@@ -121,7 +175,8 @@ import {
             SessionRegistry.load(this.currentSession).then(session => {
                 const virtualDoc = LabParser.parse(code);
                 let changed = false;
-                session.missions.forEach(mission => {
+                const missions = this.currentProjectData?.missions || session.missions;
+                missions.forEach(mission => {
                     if (!this.state[mission.id] && mission.validate(virtualDoc)) {
                         this.state[mission.id] = true;
                         this.markMissionComplete(mission.id);
@@ -129,7 +184,16 @@ import {
                     }
                 });
                 if (changed) {
-                    this.progress[this.currentSession] = { ...this.state };
+                    const savedProgress = { ...(this.progress[this.currentSession] || {}) };
+                    if (this.currentProjectData) {
+                        if (this.currentProject === 'primera-pagina') {
+                            ['m1', 'm2', 'm3', 'm4'].forEach(missionId => delete savedProgress[missionId]);
+                        }
+                        savedProgress[this.currentProject] = { ...this.state };
+                    } else {
+                        Object.assign(savedProgress, this.state);
+                    }
+                    this.progress[this.currentSession] = savedProgress;
                     this.updateRankUI();
                     saveStudentProgress(this.studentId, this.currentSession, this.progress[this.currentSession])
                         .catch(error => this.showError(error));
@@ -152,8 +216,7 @@ import {
             const total = Object.keys(this.state).length;
             const completed = Object.values(this.state).filter(Boolean).length;
             const badge = document.getElementById('level-badge');
-            const points = Object.values(this.progress)
-                .reduce((sum, sessionProgress) => sum + Object.values(sessionProgress || {}).filter(Boolean).length, 0) * 10;
+            const points = countCompleted(this.progress) * 10;
             document.getElementById('points-badge').textContent = `Puntos: ${points}`;
             const percent = total ? completed / total : 0;
             if (percent === 0) badge.textContent = 'Rango: Novato 🥚';
@@ -168,10 +231,19 @@ import {
         resetSession() {
             if (!this.studentId || !this.classControl.active) return;
             const sessionId = this.currentSession;
-            this.progress[sessionId] = {};
-            this.loadSession(sessionId).then(() => {
-                this.state = Object.fromEntries(Object.keys(this.state).map(missionId => [missionId, false]));
-                return saveStudentProgress(this.studentId, sessionId, this.state);
+            const projectId = this.currentProject;
+            const sessionProgress = { ...(this.progress[sessionId] || {}) };
+            if (this.currentProjectData) {
+                if (this.currentProject === 'primera-pagina') {
+                    ['m1', 'm2', 'm3', 'm4'].forEach(missionId => delete sessionProgress[missionId]);
+                }
+                sessionProgress[projectId] = {};
+            } else {
+                Object.keys(this.state).forEach(missionId => delete sessionProgress[missionId]);
+            }
+            this.progress[sessionId] = sessionProgress;
+            this.loadSession(sessionId, projectId).then(() => {
+                return saveStudentProgress(this.studentId, sessionId, this.progress[sessionId]);
             }).catch(error => this.showError(error));
         },
 
@@ -181,7 +253,7 @@ import {
             const url = URL.createObjectURL(blob);
             const link = document.createElement('a');
             link.href = url;
-            link.download = `proyecto_${this.currentSession}.html`;
+            link.download = `proyecto_${this.currentSession}${this.currentProject ? `_${this.currentProject}` : ''}.html`;
             link.click();
             window.setTimeout(() => URL.revokeObjectURL(url), 1000);
         },

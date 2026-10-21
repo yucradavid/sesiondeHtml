@@ -9,6 +9,9 @@ body { font-family: 'Inter', sans-serif; margin: 0; height: 100vh; display: flex
 
 .panel-header { background: var(--bg-dark); padding: 10px 16px; font-weight: bold; color: #94a3b8; border-bottom: 2px solid var(--border-color); display: flex; align-items: center; justify-content: space-between; }
 .CodeMirror { flex: 1; font-size: 16px; font-family: 'Consolas', monospace; height: 100% !important; }
+.editor-help { padding: 8px 12px; background: #172033; color: #cbd5e1; font-size: 12px; line-height: 1.6; }
+.editor-help code, .editor-help kbd { color: #7dd3fc; background: #0f172a; border: 1px solid #334155; border-radius: 3px; padding: 1px 4px; }
+.editor-help span { display: block; color: #94a3b8; }
 
 .resizer {
     width: 8px;

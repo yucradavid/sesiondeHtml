@@ -1,6 +1,6 @@
 (function () {
     const catalog = [
-        { id: 'sesion1', title: 'Sesión 1: Estructura (HTML)', src: 'js/sesiones/sesion1.js' },
+        { id: 'sesion1', title: 'Sesión 1: Proyectos con HTML', src: 'js/sesiones/sesion1.js' },
         { id: 'sesion2', title: 'Sesión 2: Diseño (CSS)', src: 'js/sesiones/sesion2.js' }
     ];
     const sessions = new Map();

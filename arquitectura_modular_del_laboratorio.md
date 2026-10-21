@@ -50,6 +50,8 @@ La integración está preparada, pero hace falta crear el proyecto y configurarl
 
 El panel docente puede iniciar o pausar una sesión, observar conexiones y puntos, y responder solicitudes de ayuda. El editor del estudiante se desbloquea al iniciar la sesión. Supabase Realtime publica cambios de clase, progreso y solicitudes; Presence señala quién está conectado. El estudiante elige avatar, recibe el estado de la clase y puede pedir ayuda. Cada misión completada suma 10 puntos y estos se calculan en el navegador a partir del progreso sincronizado; no son una puntuación antifraude. Para puntuaciones certificadas haría falta validar el trabajo en un servidor.
 
+La Sesión 1 ofrece cuatro proyectos de dificultad creciente: primera página, portada, tarea escolar y currículum. Cada proyecto tiene misiones y progreso guardados por separado. En el editor se pueden expandir abreviaturas HTML con **Tab**: `h1`, `p`, `section`, `ul>li*3` o `!` para una página HTML inicial.
+
 La URL del proyecto y la clave pública identifican la conexión web, pero no reemplazan el control de acceso. Las políticas RLS son indispensables y deben ejecutarse antes de usar la aplicación.
 
 ## Estado de la refactorización

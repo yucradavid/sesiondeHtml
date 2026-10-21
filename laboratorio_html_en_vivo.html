@@ -44,7 +44,16 @@
 
     <main class="workspace">
         <section class="panel panel-editor" id="panel-editor">
-            <div class="panel-header"><div><i class="fa-solid fa-code text-blue-400 mr-2"></i>Editor</div></div>
+            <div class="panel-header">
+                <div><i class="fa-solid fa-code text-blue-400 mr-2"></i>Editor</div>
+                <span id="editor-project-hint" class="text-xs text-slate-400">Elige un proyecto</span>
+            </div>
+            <div class="editor-help">
+                <strong>Atajos HTML:</strong>
+                escribe <code>h1</code>, <code>p</code>, <code>section</code> o <code>ul&gt;li*3</code> y pulsa <kbd>Tab</kbd>.
+                Escribe <code>!</code> + <kbd>Tab</kbd> para crear una página HTML completa.
+                <span>También puedes escribir una etiqueta y CodeMirror la cerrará al pulsar <code>&gt;</code>.</span>
+            </div>
             <textarea id="code-editor"></textarea>
         </section>
         <div class="resizer" id="drag-me" role="separator" aria-orientation="vertical" aria-label="Redimensionar editor y vista previa"></div>
@@ -56,10 +65,16 @@
             <div class="panel-header justify-center bg-purple-900/30 text-purple-200">
                 <i class="fa-solid fa-list-check mr-2"></i><span id="sidebar-title">Misiones</span>
             </div>
+            <label id="project-selector-wrapper" class="hidden px-2 pt-2">
+                <span class="sr-only">Elige un proyecto de HTML</span>
+                <select id="project-selector" class="w-full rounded border border-slate-600 bg-slate-900 p-2 text-sm text-white"></select>
+            </label>
+            <p id="project-description" class="hidden px-3 pt-2 text-xs text-slate-400"></p>
             <details class="mx-2 mt-2 rounded bg-slate-900 p-3 text-sm text-slate-300">
                 <summary class="cursor-pointer font-bold text-purple-200">Ayudas rápidas</summary>
                 <ul class="list-disc space-y-1 pl-5 pt-2">
                     <li>HTML organiza el contenido con etiquetas como <code>&lt;h1&gt;</code> y <code>&lt;p&gt;</code>.</li>
+                    <li>Usa Tab para expandir abreviaturas como <code>h1</code>, <code>p</code> y <code>ul&gt;li*3</code>.</li>
                     <li>CSS va dentro de <code>&lt;style&gt;</code>; por ejemplo: <code>h1 { color: blue; }</code>.</li>
                     <li>Revisa la misión y prueba un cambio pequeño cada vez.</li>
                     <li>Si sigues atascado, pulsa «Pedir ayuda al docente».</li>

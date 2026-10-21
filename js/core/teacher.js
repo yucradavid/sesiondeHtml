@@ -12,7 +12,7 @@ import {
 import { teacherEmail } from './supabase-config.js';
 
 const sessionCatalog = [
-    { id: 'sesion1', title: 'Sesión 1: Estructura (HTML)' },
+    { id: 'sesion1', title: 'Sesión 1: Proyectos con HTML' },
     { id: 'sesion2', title: 'Sesión 2: Diseño (CSS)' }
 ];
 let stopWatchingStudents;
@@ -29,8 +29,12 @@ function showError(error) {
 
 function progressFor(student) {
     const progress = student.progress || {};
-    const completed = Object.values(progress)
-        .reduce((count, session) => count + Object.values(session || {}).filter(Boolean).length, 0);
+    const countCompleted = value => {
+        if (value === true) return 1;
+        if (!value || typeof value !== 'object') return 0;
+        return Object.values(value).reduce((count, child) => count + countCompleted(child), 0);
+    };
+    const completed = countCompleted(progress);
     return { completed, points: completed * 10 };
 }
 
