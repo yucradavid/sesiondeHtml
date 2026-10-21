@@ -197,11 +197,11 @@ import {
             try {
                 this.studentAvatar = document.getElementById('student-avatar').value;
                 const user = await signInStudent();
-                this.studentId = user.uid;
+                this.studentId = user.id;
                 this.studentName = name;
                 const student = await enterClassroom(user, name, this.studentAvatar);
                 this.progress = student.progress || {};
-                await updateStudentProfile(user.uid, { sessionId: this.classControl.sessionId || 'sesion1' });
+                await updateStudentProfile(user.id, { sessionId: this.classControl.sessionId || 'sesion1' });
                 await this.initializeSupabase();
                 this.presenceSubscription?.();
                 this.presenceSubscription = await trackStudentPresence(user, {
@@ -215,7 +215,7 @@ import {
                 this.editor.setOption('readOnly', !this.classControl.active);
                 document.getElementById('reset-button').disabled = !this.classControl.active;
                 this.loadSession(this.classControl.sessionId || 'sesion1').catch(error => this.showError(error));
-                watchHelpRequest(user.uid, request => {
+                watchHelpRequest(user.id, request => {
                     const message = document.getElementById('help-response');
                     if (request?.teacherMessage) {
                         message.textContent = `Respuesta del docente: ${request.teacherMessage}`;
