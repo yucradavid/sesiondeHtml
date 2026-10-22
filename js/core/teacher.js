@@ -23,7 +23,16 @@ const sessionCatalog = [
             { id: 'cv', title: '4. Mi currículum', missions: 5 }
         ]
     },
-    { id: 'sesion2', title: 'Sesión 2: Diseño (CSS)', projects: [], missions: 5 }
+    {
+        id: 'sesion2',
+        title: 'Sesión 2: Diseño (CSS)',
+        projects: [
+            { id: 'colores', title: '1. Primeros colores', missions: 3 },
+            { id: 'tipografia', title: '2. Texto con personalidad', missions: 3 },
+            { id: 'tarjetas', title: '3. Tarjetas y espacios', missions: 5 },
+            { id: 'interaccion-responsive', title: '4. Interacción y diseño adaptable', missions: 4 }
+        ]
+    }
 ];
 let stopWatchingStudents;
 let stopWatchingHelp;
@@ -54,13 +63,16 @@ function completedMissions(progress, missionCount) {
 function progressFor(student, sessionId, projectId) {
     const session = sessionCatalog.find(item => item.id === sessionId);
     const savedProgress = student.progress?.[sessionId] || {};
-    if (session?.projects.length) {
+    if (session?.projects?.length) {
         const projects = projectId === 'all'
             ? session.projects
             : session.projects.filter(project => project.id === projectId);
-        const progress = projects.map((project, index) => {
+        const progress = projects.map(project => {
             const savedProject = savedProgress[project.id]
-                || (index === 0 && project.id === 'primera-pagina' ? savedProgress : {});
+                || (project.id === session.projects[0].id
+                    && Object.keys(savedProgress).some(key => /^m\d+$/.test(key))
+                    ? savedProgress
+                    : {});
             return {
                 project,
                 completed: completedMissions(savedProject, project.missions),
@@ -290,7 +302,7 @@ function subscribeToClass() {
         populateProjectSelector(control.sessionId || sessionCatalog[0].id, control.projectId || 'all');
         document.getElementById('teacher-session').disabled = classIsActive;
         document.getElementById('teacher-project').disabled = classIsActive
-            || !(sessionCatalog.find(session => session.id === control.sessionId)?.projects.length);
+            || !(sessionCatalog.find(session => session.id === control.sessionId)?.projects?.length);
         renderStudents(currentStudents);
     }, showError);
 }

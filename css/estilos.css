@@ -17,6 +17,8 @@ body { font-family: 'Inter', sans-serif; margin: 0; height: 100vh; display: flex
     width: 8px;
     background: var(--border-color);
     cursor: col-resize;
+    touch-action: none;
+    user-select: none;
     display: flex;
     justify-content: center;
     align-items: center;
@@ -24,6 +26,7 @@ body { font-family: 'Inter', sans-serif; margin: 0; height: 100vh; display: flex
 }
 .resizer:hover, .resizer:active { background: #38bdf8; }
 .resizer::after { content: "⋮"; color: #94a3b8; font-weight: bold; }
+.workspace-resizing { user-select: none; }
 
 .mission-item { padding: 16px; border-bottom: 1px solid var(--border-color); transition: all 0.3s; }
 .mission-item.completed { background: rgba(34, 197, 94, 0.1); border-left: 4px solid #22c55e; }
@@ -241,6 +244,7 @@ body.student-lab .panel-header {
 }
 body.student-lab #panel-editor .panel-header i { color: #4c6fff; }
 body.student-lab #panel-preview .panel-header i { color: var(--brand-teal); }
+body.student-lab .preview-link-hint { color: #7886a0; font-size: 11px; font-weight: 500; }
 body.student-lab .editor-help { background: #f7f9ff; color: #52627f; }
 body.student-lab .editor-help code, body.student-lab .editor-help kbd {
     border-color: #d9e1f2;
@@ -251,10 +255,50 @@ body.student-lab .editor-help span { color: #687894; }
 body.student-lab .resizer { border-radius: 999px; background: #d8e0f1; }
 body.student-lab .resizer:hover, body.student-lab .resizer:active { background: #8884f4; }
 body.student-lab .resizer::after { color: #667493; }
+body.student-lab .resizer:focus-visible { outline: 3px solid #8b87f5; outline-offset: 2px; }
 body.student-lab .panel-sidebar { border-left: 1px solid #dce4f2; background: #fff; }
 body.student-lab .panel-sidebar .panel-header {
     background: #f1efff;
     color: #4d45b4;
+}
+body.student-lab .student-session-header { justify-content: space-between; gap: 8px; }
+body.student-lab .student-session-title { display: flex; min-width: 0; align-items: center; gap: 10px; }
+body.student-lab .student-session-title span { overflow: hidden; text-overflow: ellipsis; }
+body.student-lab .student-session-title i { color: #655de8; }
+body.student-lab .student-session-content { display: flex; min-height: 0; flex: 1; flex-direction: column; overflow: hidden; }
+body.student-lab .session-panel-toggle {
+    display: grid;
+    width: 34px;
+    height: 34px;
+    flex: 0 0 auto;
+    place-items: center;
+    border: 1px solid #dedff5;
+    border-radius: 10px;
+    background: #fff;
+    color: #514bd2;
+}
+body.student-lab .session-panel-toggle i { transition: transform 160ms ease; }
+body.student-lab .session-panel-toggle[aria-expanded="true"] i { transform: rotate(180deg); }
+body.student-lab .panel-sidebar.sessions-collapsed {
+    width: 58px;
+    min-width: 58px;
+    flex: 0 0 58px;
+}
+body.student-lab .panel-sidebar.sessions-collapsed .student-session-content { display: none; }
+body.student-lab .panel-sidebar.sessions-collapsed .panel-header {
+    min-height: 100%;
+    flex-direction: column;
+    justify-content: flex-start;
+    padding: 12px 6px;
+}
+body.student-lab .panel-sidebar.sessions-collapsed .student-session-title {
+    flex-direction: column;
+    gap: 14px;
+}
+body.student-lab .panel-sidebar.sessions-collapsed .student-session-title span {
+    overflow: visible;
+    writing-mode: vertical-rl;
+    transform: rotate(180deg);
 }
 body.student-lab .mission-progress {
     border-color: #e4e5fb;
@@ -433,6 +477,10 @@ body.teacher-page a:focus-visible {
     body.student-lab .workspace { gap: 0; padding: 0; background: #fff; }
     body.student-lab .workspace > .panel { border-radius: 0; box-shadow: none; }
     body.student-lab .mobile-workspace-tabs { border-bottom: 1px solid #e3e9f5; }
+    body.student-lab .panel-sidebar.sessions-collapsed { width: 100%; min-width: 0; flex: 1; }
+    body.student-lab .panel-sidebar.sessions-collapsed .panel-header { min-height: 46px; flex-direction: row; justify-content: space-between; padding: 10px 16px; }
+    body.student-lab .panel-sidebar.sessions-collapsed .student-session-title { flex-direction: row; gap: 10px; }
+    body.student-lab .panel-sidebar.sessions-collapsed .student-session-title span { writing-mode: initial; transform: none; }
     body.teacher-page > main { padding: 16px; }
 }
 
@@ -542,6 +590,7 @@ body.teacher-page #teacher-dashboard button:hover:not(:disabled) { filter: brigh
     body.student-lab #student-identity { grid-column: 1 / -1; }
     body.student-lab #practice-status { min-width: 0; padding: 7px 10px; font-size: 11px; }
     body.student-lab #student-toolbar > div { min-width: 0; }
+    body.student-lab .preview-link-hint { max-width: 58%; text-align: right; }
 }
 
 body.student-lab.waiting-for-teacher { height: 100dvh; min-height: 100dvh; overflow: hidden; }

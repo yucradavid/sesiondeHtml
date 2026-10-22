@@ -89,43 +89,55 @@
             </div>
             <textarea id="code-editor"></textarea>
         </section>
-        <div class="resizer" id="drag-me" role="separator" aria-orientation="vertical" aria-label="Redimensionar editor y vista previa"></div>
+        <div class="resizer" id="drag-me" role="separator" aria-orientation="vertical" aria-label="Redimensionar editor y vista previa" aria-valuemin="25" aria-valuemax="75" aria-valuenow="55" tabindex="0"></div>
         <section class="panel panel-preview" id="panel-preview">
-            <div class="panel-header"><div><i class="fa-solid fa-eye text-green-400 mr-2"></i>Vista Previa</div></div>
+            <div class="panel-header">
+                <div><i class="fa-solid fa-eye text-green-400 mr-2"></i>Vista Previa</div>
+                <span class="preview-link-hint">Enlaces externos se abren aparte · YouTube se incrusta aquí en servidor web</span>
+            </div>
             <iframe id="preview-frame" title="Vista previa de tu código"></iframe>
         </section>
         <aside class="panel panel-sidebar flex flex-col" id="panel-sidebar">
-            <div class="panel-header justify-center bg-purple-900/30 text-purple-200">
-                <i class="fa-solid fa-list-check mr-2"></i><span id="sidebar-title">Misiones</span>
+            <div class="panel-header student-session-header">
+                <div class="student-session-title">
+                    <i class="fa-solid fa-list-check"></i><span id="sidebar-title">Misiones</span>
+                </div>
+                <button id="session-panel-toggle" type="button" class="session-panel-toggle" aria-expanded="true" aria-controls="student-session-content" aria-label="Contraer sesiones y misiones">
+                    <i class="fa-solid fa-chevron-right" aria-hidden="true"></i>
+                </button>
             </div>
-            <label id="project-selector-wrapper" class="hidden px-2 pt-2">
-                <span class="sr-only">Elige un proyecto de HTML</span>
-                <select id="project-selector" class="w-full rounded border border-slate-600 bg-slate-900 p-2 text-sm text-white"></select>
-            </label>
-            <p id="project-description" class="hidden px-3 pt-2 text-xs text-slate-400"></p>
-            <section class="mission-progress" aria-label="Progreso de la actividad">
-                <div class="flex items-center justify-between gap-2">
-                    <span id="mission-progress-label">0 de 0 misiones</span>
-                    <span id="mission-progress-percent">0%</span>
+            <div id="student-session-content" class="student-session-content">
+                <label id="project-selector-wrapper" class="hidden px-2 pt-2">
+                    <span class="sr-only">Elige un proyecto de HTML</span>
+                    <select id="project-selector" class="w-full rounded border border-slate-600 bg-slate-900 p-2 text-sm text-white"></select>
+                </label>
+                <p id="project-description" class="hidden px-3 pt-2 text-xs text-slate-400"></p>
+                <section class="mission-progress" aria-label="Progreso de la actividad">
+                    <div class="flex items-center justify-between gap-2">
+                        <span id="mission-progress-label">0 de 0 misiones</span>
+                        <span id="mission-progress-percent">0%</span>
+                    </div>
+                    <div class="progress-track" role="progressbar" aria-label="Progreso de la actividad" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="mission-progress-bar">
+                        <span id="mission-progress-fill"></span>
+                    </div>
+                    <p id="next-mission-hint" class="mt-2 text-xs text-slate-400">Tu siguiente misión aparecerá aquí.</p>
+                </section>
+                <details class="mx-2 mt-2 rounded bg-slate-900 p-3 text-sm text-slate-300">
+                    <summary class="cursor-pointer font-bold text-purple-200">Ayudas rápidas</summary>
+                    <ul class="list-disc space-y-1 pl-5 pt-2">
+                        <li>HTML organiza el contenido con etiquetas como <code>&lt;h1&gt;</code> y <code>&lt;p&gt;</code>.</li>
+                        <li>Usa Tab para expandir abreviaturas como <code>h1</code>, <code>p</code> y <code>ul&gt;li*3</code>.</li>
+                        <li>CSS va dentro de <code>&lt;style&gt;</code>; por ejemplo: <code>h1 { color: blue; }</code>.</li>
+                        <li>Crea enlaces con <code>&lt;a href="https://..."&gt;Abrir sitio&lt;/a&gt;</code>; se abrirán en otra pestaña.</li>
+                        <li>Los enlaces de YouTube se muestran en la vista previa. Si abres el laboratorio como archivo, usa un servidor local para reproducirlos allí.</li>
+                        <li>Revisa la misión y prueba un cambio pequeño cada vez.</li>
+                        <li>Si sigues atascado, pulsa «Pedir ayuda al docente».</li>
+                    </ul>
+                </details>
+                <div id="missions-container" class="overflow-y-auto flex-1 p-2 space-y-2"></div>
+                <div id="success-banner" class="hidden p-4 bg-green-600/20 border-t border-green-500 text-green-400 text-center font-bold text-sm">
+                    ¡SESIÓN COMPLETADA! 🎉
                 </div>
-                <div class="progress-track" role="progressbar" aria-label="Progreso de la actividad" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="mission-progress-bar">
-                    <span id="mission-progress-fill"></span>
-                </div>
-                <p id="next-mission-hint" class="mt-2 text-xs text-slate-400">Tu siguiente misión aparecerá aquí.</p>
-            </section>
-            <details class="mx-2 mt-2 rounded bg-slate-900 p-3 text-sm text-slate-300">
-                <summary class="cursor-pointer font-bold text-purple-200">Ayudas rápidas</summary>
-                <ul class="list-disc space-y-1 pl-5 pt-2">
-                    <li>HTML organiza el contenido con etiquetas como <code>&lt;h1&gt;</code> y <code>&lt;p&gt;</code>.</li>
-                    <li>Usa Tab para expandir abreviaturas como <code>h1</code>, <code>p</code> y <code>ul&gt;li*3</code>.</li>
-                    <li>CSS va dentro de <code>&lt;style&gt;</code>; por ejemplo: <code>h1 { color: blue; }</code>.</li>
-                    <li>Revisa la misión y prueba un cambio pequeño cada vez.</li>
-                    <li>Si sigues atascado, pulsa «Pedir ayuda al docente».</li>
-                </ul>
-            </details>
-            <div id="missions-container" class="overflow-y-auto flex-1 p-2 space-y-2"></div>
-            <div id="success-banner" class="hidden p-4 bg-green-600/20 border-t border-green-500 text-green-400 text-center font-bold text-sm">
-                ¡SESIÓN COMPLETADA! 🎉
             </div>
         </aside>
     </main>

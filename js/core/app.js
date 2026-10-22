@@ -78,6 +78,9 @@ import { avatarStyles, createAvatarCharacter, createAvatarSeed, createAvatarValu
             document.querySelectorAll('[data-workspace-view]').forEach(button => {
                 button.addEventListener('click', () => this.showWorkspaceView(button.dataset.workspaceView));
             });
+            document.getElementById('session-panel-toggle').addEventListener('click', () => {
+                this.toggleStudentSessionPanel();
+            });
             this.refreshAvatarPreview();
             this.showWorkspaceView('panel-editor');
             LabEditor.initResizer();
@@ -143,8 +146,9 @@ import { avatarStyles, createAvatarCharacter, createAvatarSeed, createAvatarValu
                 let missions = session.missions;
                 let baseHTML = session.baseHTML;
                 this.currentProjectData = null;
+                const hasProjects = Array.isArray(session.projects) && session.projects.length > 0;
 
-                if (session.projects) {
+                if (hasProjects) {
                     projectSelectorWrapper.classList.remove('hidden');
                     projectSelector.replaceChildren();
                     session.projects.forEach(project => {
@@ -182,9 +186,28 @@ import { avatarStyles, createAvatarCharacter, createAvatarSeed, createAvatarValu
                     document.getElementById('sidebar-title').textContent = session.title;
                 }
 
-                const storedSessionProgress = this.progress[session.id] || {};
+                let storedSessionProgress = this.progress[session.id] || {};
+                if (hasProjects) {
+                    const legacyMissionKeys = Object.keys(storedSessionProgress).filter(key => /^m\d+$/.test(key));
+                    if (legacyMissionKeys.length) {
+                        const firstProject = session.projects[0];
+                        const migratedProgress = { ...storedSessionProgress };
+                        const legacyProgress = Object.fromEntries(legacyMissionKeys.map(key => [key, migratedProgress[key]]));
+                        legacyMissionKeys.forEach(key => delete migratedProgress[key]);
+                        migratedProgress[firstProject.id] = {
+                            ...legacyProgress,
+                            ...(migratedProgress[firstProject.id] || {})
+                        };
+                        this.progress[session.id] = migratedProgress;
+                        storedSessionProgress = migratedProgress;
+                        if (this.studentId) {
+                            saveStudentProgress(this.studentId, session.id, migratedProgress)
+                                .catch(error => this.showError(error));
+                        }
+                    }
+                }
                 const storedProjectProgress = this.currentProjectData
-                    ? storedSessionProgress[this.currentProject] || (this.currentProject === 'primera-pagina' ? storedSessionProgress : {})
+                    ? storedSessionProgress[this.currentProject] || {}
                     : storedSessionProgress;
                 this.state = Object.fromEntries(missions.map(mission => [
                     mission.id,
@@ -354,7 +377,74 @@ import { avatarStyles, createAvatarCharacter, createAvatarSeed, createAvatarValu
             const doc = frame.contentDocument || frame.contentWindow.document;
             doc.open();
             doc.write((this.currentSession === 'sesion1' ? PREVIEW_STYLES : '') + userCode);
+            this.enhancePreviewLinks(doc);
             doc.close();
+        },
+
+        enhancePreviewLinks(doc) {
+            doc.querySelectorAll('a[href]').forEach(link => {
+                const href = link.getAttribute('href')?.trim();
+                if (!href || !/^(?:https?:)?\/\//i.test(href)) return;
+
+                let url;
+                try {
+                    url = new URL(href.startsWith('//') ? `https:${href}` : href);
+                } catch (error) {
+                    console.warn('Se omitió un enlace externo con formato inválido.', error.message);
+                    return;
+                }
+
+                link.target = '_blank';
+                link.rel = 'noopener noreferrer';
+                link.dataset.externalLink = 'true';
+
+                const videoId = this.youtubeVideoId(url);
+                if (!videoId || link.dataset.videoEnhanced === 'true') return;
+
+                const embed = doc.createElement('div');
+                embed.className = 'preview-video-embed';
+                embed.setAttribute('role', 'group');
+                embed.setAttribute('aria-label', `Vista previa del video: ${link.textContent.trim() || 'YouTube'}`);
+                embed.style.cssText = 'width:min(100%,560px);margin:14px 0;border-radius:12px;overflow:hidden;background:#111827;box-shadow:0 4px 14px rgba(15,23,42,.2)';
+                const playerFrame = doc.createElement('div');
+                playerFrame.style.cssText = 'width:100%;aspect-ratio:16/9;background:#111827';
+                const player = doc.createElement('iframe');
+                player.src = `https://www.youtube-nocookie.com/embed/${videoId}`;
+                player.title = `Video de YouTube: ${link.textContent.trim() || 'video'}`;
+                player.loading = 'lazy';
+                player.referrerPolicy = 'strict-origin-when-cross-origin';
+                player.allow = 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture';
+                player.allowFullscreen = true;
+                player.style.cssText = 'width:100%;height:100%;border:0';
+                playerFrame.appendChild(player);
+                const playbackNote = doc.createElement('p');
+                playbackNote.textContent = window.location.protocol === 'file:'
+                    ? 'YouTube bloquea la reproducción incrustada al abrir la página como archivo. Usa un servidor local o abre el video en YouTube.'
+                    : 'Si el reproductor no carga, puedes abrir el video directamente en YouTube.';
+                playbackNote.style.cssText = 'margin:0;padding:8px 12px 0;background:#f8fafc;color:#52627f;font:12px sans-serif';
+                const fallbackLink = doc.createElement('a');
+                fallbackLink.href = url.href;
+                fallbackLink.target = '_blank';
+                fallbackLink.rel = 'noopener noreferrer';
+                fallbackLink.textContent = 'Abrir video en YouTube';
+                fallbackLink.style.cssText = 'display:block;padding:6px 12px 10px;background:#f8fafc;color:#4338ca;font:600 13px sans-serif;text-decoration:underline';
+                embed.append(playerFrame, playbackNote, fallbackLink);
+                link.insertAdjacentElement('afterend', embed);
+                link.dataset.videoEnhanced = 'true';
+            });
+        },
+
+        youtubeVideoId(url) {
+            const host = url.hostname.toLowerCase().replace(/^www\./, '');
+            let videoId = '';
+            if (host === 'youtu.be') {
+                videoId = url.pathname.split('/').filter(Boolean)[0] || '';
+            } else if (host === 'youtube.com' || host === 'm.youtube.com' || host === 'youtube-nocookie.com') {
+                const pathParts = url.pathname.split('/').filter(Boolean);
+                if (url.pathname === '/watch') videoId = url.searchParams.get('v') || '';
+                else if (['embed', 'shorts', 'live'].includes(pathParts[0])) videoId = pathParts[1] || '';
+            }
+            return /^[\w-]{11}$/.test(videoId) ? videoId : '';
         },
 
         validateMissions(code) {
@@ -435,6 +525,18 @@ import { avatarStyles, createAvatarCharacter, createAvatarSeed, createAvatarValu
             });
             document.getElementById('drag-me').classList.toggle('mobile-panel-hidden', panelId !== 'panel-editor');
             this.editor?.refresh();
+        },
+
+        toggleStudentSessionPanel() {
+            const panel = document.getElementById('panel-sidebar');
+            const button = document.getElementById('session-panel-toggle');
+            const expanded = button.getAttribute('aria-expanded') === 'true';
+            button.setAttribute('aria-expanded', String(!expanded));
+            button.setAttribute(
+                'aria-label',
+                expanded ? 'Expandir sesiones y misiones' : 'Contraer sesiones y misiones'
+            );
+            panel.classList.toggle('sessions-collapsed', expanded);
         },
 
         resetSession() {

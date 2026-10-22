@@ -94,33 +94,58 @@ window.LabEditor = {
         const leftSide = document.getElementById('panel-editor');
         const rightSide = document.getElementById('panel-preview');
         const workspace = resizer.parentNode;
-        let startX = 0;
-        let startWidth = 0;
+        let pointerStart = 0;
+        let editorStartWidth = 0;
+        let availableWidth = 0;
+
+        const getWidthLimits = () => {
+            const minimum = Math.min(240, availableWidth * 0.25);
+            return { minimum, maximum: availableWidth - minimum };
+        };
+
+        const setEditorWidth = width => {
+            const { minimum, maximum } = getWidthLimits();
+            const clampedWidth = Math.max(minimum, Math.min(maximum, width));
+            const workspaceWidth = workspace.getBoundingClientRect().width;
+            leftSide.style.flex = `0 0 ${(clampedWidth / workspaceWidth) * 100}%`;
+            resizer.setAttribute('aria-valuenow', String(Math.round((clampedWidth / availableWidth) * 100)));
+        };
 
         const stopResize = () => {
-            document.removeEventListener('mousemove', resize);
-            document.removeEventListener('mouseup', stopResize);
+            document.removeEventListener('pointermove', resize);
+            document.removeEventListener('pointerup', stopResize);
+            document.removeEventListener('pointercancel', stopResize);
             document.body.style.cursor = '';
-            leftSide.style.userSelect = '';
-            leftSide.style.pointerEvents = '';
-            rightSide.style.pointerEvents = '';
+            document.body.classList.remove('workspace-resizing');
         };
 
         const resize = event => {
-            const dx = event.clientX - startX;
-            const width = ((startWidth + dx) * 100) / workspace.getBoundingClientRect().width;
-            leftSide.style.flex = `0 0 ${Math.max(15, Math.min(75, width))}%`;
+            setEditorWidth(editorStartWidth + event.clientX - pointerStart);
         };
 
-        resizer.addEventListener('mousedown', event => {
-            startX = event.clientX;
-            startWidth = leftSide.getBoundingClientRect().width;
-            document.addEventListener('mousemove', resize);
-            document.addEventListener('mouseup', stopResize);
+        resizer.addEventListener('pointerdown', event => {
+            if (event.button !== 0) return;
+            event.preventDefault();
+            pointerStart = event.clientX;
+            editorStartWidth = leftSide.getBoundingClientRect().width;
+            availableWidth = editorStartWidth + rightSide.getBoundingClientRect().width;
+            document.addEventListener('pointermove', resize);
+            document.addEventListener('pointerup', stopResize);
+            document.addEventListener('pointercancel', stopResize);
             document.body.style.cursor = 'col-resize';
-            leftSide.style.userSelect = 'none';
-            leftSide.style.pointerEvents = 'none';
-            rightSide.style.pointerEvents = 'none';
+            document.body.classList.add('workspace-resizing');
+        });
+
+        resizer.addEventListener('keydown', event => {
+            availableWidth = leftSide.getBoundingClientRect().width + rightSide.getBoundingClientRect().width;
+            const { minimum, maximum } = getWidthLimits();
+            const currentWidth = leftSide.getBoundingClientRect().width;
+            if (event.key === 'ArrowLeft') setEditorWidth(currentWidth - 24);
+            else if (event.key === 'ArrowRight') setEditorWidth(currentWidth + 24);
+            else if (event.key === 'Home') setEditorWidth(minimum);
+            else if (event.key === 'End') setEditorWidth(maximum);
+            else return;
+            event.preventDefault();
         });
     }
 };
