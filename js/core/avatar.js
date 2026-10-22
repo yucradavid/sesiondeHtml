@@ -1,4 +1,5 @@
 const avatarStyles = ['adventurer', 'bottts', 'pixel-art', 'lorelei'];
+const outfitColors = ['#7c3aed', '#0284c7', '#059669', '#db2777', '#d97706', '#4f46e5'];
 
 export function createAvatarSeed() {
     return globalThis.crypto?.randomUUID?.()
@@ -35,6 +36,55 @@ export function setAvatarImage(image, value) {
         image.src = dicebearImage.src;
     };
     dicebearImage.src = avatarUrl(value);
+}
+
+export function createAvatarCharacter(value, name, size = 'lobby') {
+    const seed = String(value || 'student');
+    const storedStyle = seed.split(':', 1)[0];
+    const style = avatarStyles.includes(storedStyle) ? storedStyle : avatarStyles[0];
+    const hash = [...seed].reduce((total, character) => (total * 31 + character.charCodeAt(0)) >>> 0, 7);
+    const character = document.createElement('div');
+    character.className = `avatar-character avatar-character--${size} avatar-character--${style}`;
+    character.setAttribute('role', 'img');
+    character.setAttribute('aria-label', `Avatar de ${name || 'estudiante'}`);
+    character.style.setProperty('--avatar-outfit', outfitColors[hash % outfitColors.length]);
+
+    const head = document.createElement('div');
+    head.className = 'avatar-character-head';
+    const face = document.createElement('img');
+    face.className = 'avatar-character-face';
+    face.alt = '';
+    face.setAttribute('aria-hidden', 'true');
+    setAvatarImage(face, value);
+    head.appendChild(face);
+
+    const neck = document.createElement('span');
+    neck.className = 'avatar-character-neck';
+    neck.setAttribute('aria-hidden', 'true');
+
+    const upperBody = document.createElement('div');
+    upperBody.className = 'avatar-character-upper-body';
+    const leftArm = document.createElement('span');
+    leftArm.className = 'avatar-character-arm avatar-character-arm--left';
+    const torso = document.createElement('span');
+    torso.className = 'avatar-character-torso';
+    const rightArm = document.createElement('span');
+    rightArm.className = 'avatar-character-arm avatar-character-arm--right';
+    upperBody.append(leftArm, torso, rightArm);
+
+    const lowerBody = document.createElement('div');
+    lowerBody.className = 'avatar-character-lower-body';
+    const leftLeg = document.createElement('span');
+    leftLeg.className = 'avatar-character-leg avatar-character-leg--left';
+    const rightLeg = document.createElement('span');
+    rightLeg.className = 'avatar-character-leg avatar-character-leg--right';
+    lowerBody.append(leftLeg, rightLeg);
+
+    const shadow = document.createElement('span');
+    shadow.className = 'avatar-character-shadow';
+    shadow.setAttribute('aria-hidden', 'true');
+    character.append(head, neck, upperBody, lowerBody, shadow);
+    return character;
 }
 
 export { avatarStyles };

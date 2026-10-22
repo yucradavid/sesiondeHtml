@@ -10,7 +10,7 @@ import {
     watchStudents
 } from './supabase.js';
 import { teacherEmail } from './supabase-config.js';
-import { setAvatarImage } from './avatar.js';
+import { createAvatarCharacter } from './avatar.js';
 
 const sessionCatalog = [
     {
@@ -138,11 +138,7 @@ function renderStudents(students) {
         const details = document.createElement('div');
         const identity = document.createElement('div');
         identity.className = 'teacher-student-identity';
-        const avatar = document.createElement('img');
-        avatar.className = 'teacher-student-avatar';
-        setAvatarImage(avatar, student.avatar);
-        avatar.alt = `Avatar de ${student.name || 'estudiante'}`;
-        avatar.loading = 'lazy';
+        const avatar = createAvatarCharacter(student.avatar, student.name, 'roster');
         const name = document.createElement('h2');
         name.className = 'text-white font-bold';
         name.textContent = student.name || 'Estudiante';
@@ -204,11 +200,7 @@ function renderHelpRequests(requests) {
         const title = document.createElement('h3');
         title.className = 'teacher-help-title font-bold text-white';
         const student = currentStudents[studentId];
-        const avatar = document.createElement('img');
-        avatar.className = 'teacher-student-avatar';
-        setAvatarImage(avatar, student?.avatar);
-        avatar.alt = `Avatar de ${student?.name || 'estudiante'}`;
-        avatar.loading = 'lazy';
+        const avatar = createAvatarCharacter(student?.avatar, student?.name, 'roster');
         const studentName = document.createElement('span');
         studentName.textContent = `${student?.name || 'Estudiante'} — ${request.status === 'pending' ? 'necesita ayuda' : 'respondida'}`;
         title.append(avatar, studentName);

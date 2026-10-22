@@ -10,7 +10,7 @@ import {
     resumeStudent,
     isSupabaseConfigured
 } from './supabase.js';
-import { avatarStyles, createAvatarSeed, createAvatarValue, setAvatarImage } from './avatar.js';
+import { avatarStyles, createAvatarCharacter, createAvatarSeed, createAvatarValue } from './avatar.js';
 
 (function () {
     function countCompleted(value) {
@@ -66,6 +66,7 @@ import { avatarStyles, createAvatarSeed, createAvatarValue, setAvatarImage } fro
                 event.preventDefault();
                 this.submitHelpRequest().catch(error => this.showError(error));
             });
+            document.getElementById('lobby-help-button').addEventListener('click', () => this.askForHelp());
             document.getElementById('avatar-form').addEventListener('submit', event => {
                 event.preventDefault();
                 this.saveAvatar().catch(error => this.showError(error));
@@ -102,6 +103,7 @@ import { avatarStyles, createAvatarSeed, createAvatarValue, setAvatarImage } fro
                 const sessionChanged = control.sessionId && control.sessionId !== this.currentSession;
                 const projectChanged = control.projectId !== this.classControl.projectId;
                 this.classControl = control;
+                this.setWaitingRoom(!control.active);
                 document.getElementById('practice-status').textContent = control.active
                     ? `Práctica en curso: ${SessionRegistry.catalog.find(session => session.id === control.sessionId)?.title || control.sessionId}`
                     : 'La práctica todavía no ha comenzado. Espera a que el docente la inicie.';
@@ -222,26 +224,30 @@ import { avatarStyles, createAvatarSeed, createAvatarValue, setAvatarImage } fro
             const seed = regenerate || !current ? createAvatarSeed() : current;
             this.studentAvatar = createAvatarValue(style, seed);
             const preview = document.getElementById('student-avatar-preview');
-            setAvatarImage(preview, this.studentAvatar);
+            const character = createAvatarCharacter(this.studentAvatar, 'Vista previa', 'preview');
+            character.id = preview.id;
+            preview.replaceWith(character);
         },
 
         refreshProfileAvatarPreview(regenerate = false) {
             const style = document.getElementById('profile-avatar-style').value;
             const current = this.pendingAvatarSeed || createAvatarSeed();
             this.pendingAvatarSeed = regenerate || !this.pendingAvatarSeed ? createAvatarSeed() : current;
-            setAvatarImage(
-                document.getElementById('profile-avatar-preview'),
-                createAvatarValue(style, this.pendingAvatarSeed)
+            const preview = document.getElementById('profile-avatar-preview');
+            const character = createAvatarCharacter(
+                createAvatarValue(style, this.pendingAvatarSeed),
+                'Vista previa',
+                'preview'
             );
+            character.id = preview.id;
+            preview.replaceWith(character);
         },
 
         renderClassmates(classmates) {
-            const lobby = document.getElementById('class-lobby');
             const roster = document.getElementById('lobby-students');
-            lobby.classList.remove('hidden');
             roster.replaceChildren();
-            document.getElementById('lobby-summary').textContent =
-                `Lobby de clase · ${classmates.length} ${classmates.length === 1 ? 'compañero conectado' : 'compañeros conectados'}`;
+            document.getElementById('lobby-friend-count').textContent =
+                `${classmates.length} ${classmates.length === 1 ? 'conectado' : 'conectados'}`;
             if (classmates.length === 0) {
                 const empty = document.createElement('p');
                 empty.className = 'lobby-empty';
@@ -252,11 +258,7 @@ import { avatarStyles, createAvatarSeed, createAvatarValue, setAvatarImage } fro
             classmates.forEach(classmate => {
                 const card = document.createElement('article');
                 card.className = 'lobby-student';
-                const avatar = document.createElement('img');
-                avatar.className = 'lobby-avatar';
-                setAvatarImage(avatar, classmate.avatar);
-                avatar.alt = `Avatar de ${classmate.name}`;
-                avatar.loading = 'lazy';
+                const avatar = createAvatarCharacter(classmate.avatar, classmate.name, 'lobby');
                 const name = document.createElement('strong');
                 name.textContent = classmate.name;
                 const status = document.createElement('span');
@@ -264,6 +266,22 @@ import { avatarStyles, createAvatarSeed, createAvatarValue, setAvatarImage } fro
                 card.append(avatar, name, status);
                 roster.appendChild(card);
             });
+        },
+
+        setWaitingRoom(waiting) {
+            if (!this.studentId) return;
+            const lobby = document.getElementById('class-lobby');
+            document.body.classList.toggle('waiting-for-teacher', waiting);
+            lobby.classList.toggle('hidden', !waiting);
+            document.getElementById('lobby-summary').textContent = waiting
+                ? 'Esperando al docente'
+                : 'La práctica está en marcha';
+            document.getElementById('lobby-waiting-message').textContent = waiting
+                ? 'Ya estás en la sala. Cuando el docente inicie la práctica, entrarás automáticamente al laboratorio.'
+                : 'La práctica ha comenzado. Tu sala de espera se cerró y el laboratorio está listo.';
+            if (waiting) {
+                this.updateStudentAvatarInUI();
+            }
         },
 
         openAvatarDialog() {
@@ -313,9 +331,13 @@ import { avatarStyles, createAvatarSeed, createAvatarValue, setAvatarImage } fro
 
         updateStudentAvatarInUI() {
             const badge = document.getElementById('student-avatar-badge');
-            setAvatarImage(badge, this.studentAvatar);
-            badge.alt = `Avatar de ${this.studentName}`;
-            badge.classList.remove('hidden');
+            const badgeCharacter = createAvatarCharacter(this.studentAvatar, this.studentName, 'badge');
+            badgeCharacter.id = badge.id;
+            badge.replaceWith(badgeCharacter);
+            const lobbyAvatar = document.getElementById('lobby-own-avatar');
+            const ownCharacter = createAvatarCharacter(this.studentAvatar, this.studentName, 'own');
+            ownCharacter.id = lobbyAvatar.id;
+            lobbyAvatar.replaceWith(ownCharacter);
             document.getElementById('student-identity').textContent = this.studentName;
             document.getElementById('edit-avatar-button').classList.remove('hidden');
         },
@@ -482,10 +504,12 @@ import { avatarStyles, createAvatarSeed, createAvatarValue, setAvatarImage } fro
             document.getElementById('login-modal').classList.add('hidden');
             document.getElementById('student-login-error').classList.add('hidden');
             this.updateStudentAvatarInUI();
+            this.setWaitingRoom(!this.classControl.active);
             document.getElementById('editor-lock-hint').classList.toggle('hidden', Boolean(this.classControl.active));
             this.editor.setOption('readOnly', !this.classControl.active);
             document.getElementById('reset-button').disabled = !this.classControl.active;
             document.getElementById('help-button').disabled = false;
+            document.getElementById('lobby-help-button').disabled = false;
             this.loadSession(this.classControl.sessionId || student.sessionId).catch(error => this.showError(error));
             watchHelpRequest(user.id, request => {
                 const message = document.getElementById('help-response');
@@ -495,8 +519,17 @@ import { avatarStyles, createAvatarSeed, createAvatarValue, setAvatarImage } fro
                 } else {
                     message.classList.add('hidden');
                 }
+                const lobbyMessage = document.getElementById('lobby-help-response');
+                lobbyMessage.textContent = message.textContent;
+                lobbyMessage.classList.toggle('hidden', message.classList.contains('hidden'));
                 document.getElementById('help-button').disabled = request?.status === 'pending';
+                document.getElementById('lobby-help-button').disabled = request?.status === 'pending';
                 document.getElementById('help-button').textContent = request?.status === 'answered'
+                    ? 'Pedir otra ayuda'
+                    : request?.status === 'pending'
+                        ? 'Solicitud enviada'
+                        : 'Pedir ayuda al docente';
+                document.getElementById('lobby-help-button').textContent = request?.status === 'answered'
                     ? 'Pedir otra ayuda'
                     : request?.status === 'pending'
                         ? 'Solicitud enviada'
