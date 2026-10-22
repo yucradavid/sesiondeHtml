@@ -209,13 +209,14 @@ export function watchHelpRequest(userId, callback, onError) {
     };
 }
 
-export function watchStudents(callback, onError) {
+export function watchStudents(callback, onError, onRealtimeStatus) {
     const supabase = getSupabase();
     let rows = [];
     let presence = {};
     let active = true;
     let presenceChannel;
     let studentsChannel;
+    onRealtimeStatus?.(false);
     const publish = () => {
         if (active) callback(Object.fromEntries(rows.map(student => [
             student.id,
@@ -260,6 +261,7 @@ export function watchStudents(callback, onError) {
     studentsChannel = supabase.channel('student-row-updates')
         .on('postgres_changes', { event: '*', schema: 'public', table: 'students' }, refresh)
         .subscribe(status => {
+            onRealtimeStatus?.(status === 'SUBSCRIBED');
             if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
                 onError?.(new Error(`No se pudo escuchar el progreso: ${status}`));
             }
@@ -334,6 +336,20 @@ export async function updateStudentProfile(userId, profile) {
     throwIfError(error);
 }
 
+export async function updateStudentNameAsTeacher(userId, name) {
+    const user = await currentUser();
+    if (!isTeacher(user)) throw new Error('Solo el docente puede editar el nombre del estudiante.');
+    const normalizedName = name.trim();
+    if (normalizedName.length < 1 || normalizedName.length > 60) {
+        throw new Error('El nombre debe tener entre 1 y 60 caracteres.');
+    }
+    const { error } = await getSupabase()
+        .from('students')
+        .update({ name: normalizedName, updated_at: new Date().toISOString() })
+        .eq('id', userId);
+    throwIfError(error);
+}
+
 export async function saveStudentProgress(userId, sessionId, progress) {
     const user = await currentUser();
     if (user.id !== userId) throw new Error('No puedes guardar el progreso de otro estudiante.');
@@ -350,6 +366,53 @@ export async function saveStudentProgress(userId, sessionId, progress) {
         updated_at: new Date().toISOString()
     }).eq('id', userId);
     throwIfError(error);
+}
+
+export async function recordMissionCompletion(userId, completion) {
+    const user = await currentUser();
+    if (user.id !== userId || !user.is_anonymous) {
+        throw new Error('Solo la cuenta del estudiante puede registrar su avance.');
+    }
+    const { error } = await getSupabase().from('mission_completions').upsert({
+        student_id: userId,
+        session_id: completion.sessionId,
+        project_id: completion.projectId,
+        mission_id: completion.missionId
+    }, {
+        onConflict: 'student_id,session_id,project_id,mission_id',
+        ignoreDuplicates: true
+    });
+    throwIfError(error);
+}
+
+export function watchMissionCompletions(callback, onError) {
+    const supabase = getSupabase();
+    let active = true;
+    let channel;
+    const refresh = async () => {
+        const { data, error } = await supabase
+            .from('mission_completions')
+            .select('student_id, session_id, project_id, mission_id, completed_at')
+            .order('completed_at', { ascending: false })
+            .limit(20);
+        if (error) {
+            onError?.(error);
+            return;
+        }
+        if (active) callback(data || []);
+    };
+    refresh();
+    channel = supabase.channel('mission-completion-updates')
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'mission_completions' }, refresh)
+        .subscribe(status => {
+            if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+                onError?.(new Error(`No se pudo escuchar el historial de misiones: ${status}`));
+            }
+        });
+    return () => {
+        active = false;
+        if (channel) supabase.removeChannel(channel);
+    };
 }
 
 export async function requestTeacherHelp(userId, request) {

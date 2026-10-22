@@ -1,6 +1,7 @@
 import {
     enterClassroom,
     requestTeacherHelp,
+    recordMissionCompletion,
     saveStudentProgress,
     signInStudent,
     trackStudentPresence,
@@ -451,11 +452,13 @@ import { avatarStyles, createAvatarCharacter, createAvatarSeed, createAvatarValu
             SessionRegistry.load(this.currentSession).then(session => {
                 const virtualDoc = LabParser.parse(code);
                 let changed = false;
+                const newlyCompletedMissions = [];
                 const missions = this.currentProjectData?.missions || session.missions;
                 missions.forEach(mission => {
                     if (!this.state[mission.id] && mission.validate(virtualDoc)) {
                         this.state[mission.id] = true;
                         this.markMissionComplete(mission.id);
+                        newlyCompletedMissions.push(mission.id);
                         changed = true;
                     }
                 });
@@ -473,6 +476,13 @@ import { avatarStyles, createAvatarCharacter, createAvatarSeed, createAvatarValu
                     this.updateRankUI();
                     saveStudentProgress(this.studentId, this.currentSession, this.progress[this.currentSession])
                         .catch(error => this.showError(error));
+                    newlyCompletedMissions.forEach(missionId => {
+                        recordMissionCompletion(this.studentId, {
+                            sessionId: this.currentSession,
+                            projectId: this.currentProject || 'sesion-completa',
+                            missionId
+                        }).catch(error => this.showError(error));
+                    });
                 }
             }).catch(error => this.showError(error));
         },

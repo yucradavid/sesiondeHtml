@@ -35,9 +35,24 @@ create table if not exists public.help_requests (
     answered_at timestamptz
 );
 
+create table if not exists public.mission_completions (
+    id uuid primary key default gen_random_uuid(),
+    student_id uuid not null references public.students (id) on delete cascade,
+    session_id text not null check (session_id in ('sesion1', 'sesion2')),
+    project_id text not null check (char_length(project_id) between 1 and 80),
+    mission_id text not null check (mission_id ~ '^m[1-9][0-9]*$'),
+    completed_at timestamptz not null default now()
+);
+
+create unique index if not exists mission_completions_student_mission_idx
+    on public.mission_completions (student_id, session_id, project_id, mission_id);
+create index if not exists mission_completions_completed_at_idx
+    on public.mission_completions (completed_at desc);
+
 alter table public.classroom_control enable row level security;
 alter table public.students enable row level security;
 alter table public.help_requests enable row level security;
+alter table public.mission_completions enable row level security;
 
 drop policy if exists "Authenticated users can read classroom control" on public.classroom_control;
 create policy "Authenticated users can read classroom control"
@@ -114,9 +129,23 @@ create policy "Teacher can close help requests"
     on public.help_requests for delete to authenticated
     using ((select auth.jwt() ->> 'email') = 'davidrobertyucramamani@gmail.com');
 
+drop policy if exists "Students can record their own mission completions" on public.mission_completions;
+create policy "Students can record their own mission completions"
+    on public.mission_completions for insert to authenticated
+    with check (
+        (select auth.uid()) = student_id
+        and (select auth.jwt() ->> 'is_anonymous') = 'true'
+    );
+
+drop policy if exists "Teacher can read mission completion history" on public.mission_completions;
+create policy "Teacher can read mission completion history"
+    on public.mission_completions for select to authenticated
+    using ((select auth.jwt() ->> 'email') = 'davidrobertyucramamani@gmail.com');
+
 grant select, insert, update on public.classroom_control to authenticated;
 grant select, insert, update on public.students to authenticated;
 grant select, insert, update, delete on public.help_requests to authenticated;
+grant select, insert on public.mission_completions to authenticated;
 
 do $$
 begin
@@ -142,5 +171,14 @@ begin
 exception
     when duplicate_object then null;
     when undefined_object then raise notice 'Enable Realtime publication in Supabase and add help_requests.';
+end
+$$;
+
+do $$
+begin
+    alter publication supabase_realtime add table public.mission_completions;
+exception
+    when duplicate_object then null;
+    when undefined_object then raise notice 'Enable Realtime publication in Supabase and add mission_completions.';
 end
 $$;

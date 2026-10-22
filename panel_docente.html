@@ -56,9 +56,23 @@
                 <article class="teacher-stat"><span>Ayuda pendiente</span><strong id="pending-help-count">0</strong></article>
             </section>
 
+            <section class="student-card mb-8" aria-labelledby="progress-chart-title">
+                <div class="mb-4 flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                        <h2 id="progress-chart-title" class="text-xl font-bold">Avance por subsesión</h2>
+                        <p class="text-sm text-slate-400">Promedio de misiones del grupo y estudiantes que completaron cada subsesión.</p>
+                    </div>
+                    <span id="teacher-realtime-status" class="teacher-live-indicator"><span aria-hidden="true"></span>Conectando…</span>
+                </div>
+                <div id="progress-chart" class="teacher-progress-chart" aria-live="polite" aria-atomic="true"></div>
+            </section>
+
             <section class="mb-8">
                 <div class="mb-3 flex flex-wrap items-center justify-between gap-3">
-                    <h2 class="text-2xl font-bold text-white">Avances de estudiantes</h2>
+                    <div>
+                        <h2 class="text-2xl font-bold text-white">Gestión de estudiantes</h2>
+                        <p id="visible-student-count" class="text-sm text-slate-400"></p>
+                    </div>
                     <div class="flex flex-wrap gap-2">
                         <label class="sr-only" for="student-search">Buscar estudiante</label>
                         <input id="student-search" type="search" class="rounded border border-slate-600 bg-slate-800 px-3 py-2 text-white" placeholder="Buscar estudiante">
@@ -67,10 +81,26 @@
                             <option value="all">Todos</option>
                             <option value="online">Conectados</option>
                             <option value="help">Necesitan ayuda</option>
+                            <option value="in-progress">Con avance</option>
+                            <option value="not-started">Sin iniciar</option>
+                            <option value="complete">Completaron</option>
                         </select>
+                        <button type="button" onclick="TeacherPanel.exportProgressCsv()" class="teacher-management-button">
+                            <i class="fa-solid fa-file-csv mr-1" aria-hidden="true"></i>Exportar CSV
+                        </button>
                     </div>
                 </div>
                 <div id="students-grid" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4"></div>
+            </section>
+
+            <section class="student-card mb-8" aria-labelledby="recent-completions-title">
+                <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                        <h2 id="recent-completions-title" class="text-xl font-bold">Actividad reciente</h2>
+                        <p class="text-sm text-slate-400">Últimas misiones reportadas desde las cuentas de estudiante; no equivale a una calificación verificada.</p>
+                    </div>
+                </div>
+                <ol id="recent-completions" class="teacher-completion-list" aria-live="polite" aria-relevant="additions text"></ol>
             </section>
 
             <section>

@@ -4,13 +4,17 @@ import {
     signInTeacher,
     signOutUser,
     updateClassControl,
+    updateStudentNameAsTeacher,
     watchAuth,
     watchClassControl,
     watchHelpRequests,
+    watchMissionCompletions,
     watchStudents
 } from './supabase.js';
 import { teacherEmail } from './supabase-config.js';
 import { createAvatarCharacter } from './avatar.js';
+import { progressFor } from './progress.js';
+import { serializeCsv } from './teacher-report.js';
 
 const sessionCatalog = [
     {
@@ -36,8 +40,10 @@ const sessionCatalog = [
 ];
 let stopWatchingStudents;
 let stopWatchingHelp;
+let stopWatchingCompletions;
 let currentStudents = {};
 let currentHelpRequests = {};
+let currentMissionCompletions = [];
 let classIsActive = false;
 let toastTimeout;
 
@@ -55,42 +61,91 @@ function showError(error) {
     }
 }
 
-function completedMissions(progress, missionCount) {
-    return Array.from({ length: missionCount }, (_, index) => Boolean(progress?.[`m${index + 1}`]))
-        .filter(Boolean).length;
-}
-
-function progressFor(student, sessionId, projectId) {
+function renderProgressChart(students, sessionId) {
+    const chart = document.getElementById('progress-chart');
+    chart.replaceChildren();
     const session = sessionCatalog.find(item => item.id === sessionId);
-    const savedProgress = student.progress?.[sessionId] || {};
-    if (session?.projects?.length) {
-        const projects = projectId === 'all'
-            ? session.projects
-            : session.projects.filter(project => project.id === projectId);
-        const progress = projects.map(project => {
-            const savedProject = savedProgress[project.id]
-                || (project.id === session.projects[0].id
-                    && Object.keys(savedProgress).some(key => /^m\d+$/.test(key))
-                    ? savedProgress
-                    : {});
-            return {
-                project,
-                completed: completedMissions(savedProject, project.missions),
-                total: project.missions
-            };
-        });
-        return {
-            completed: progress.reduce((total, item) => total + item.completed, 0),
-            total: progress.reduce((total, item) => total + item.total, 0),
-            projects: progress
-        };
+    document.getElementById('progress-chart-title').textContent =
+        `Avance por subsesión · ${session?.title || sessionId}`;
+    const projects = session?.projects || [];
+    if (!projects.length || students.length === 0) {
+        const empty = document.createElement('p');
+        empty.className = 'text-sm text-slate-400';
+        empty.textContent = students.length
+            ? 'Esta sesión todavía no tiene subsesiones para graficar.'
+            : 'El gráfico aparecerá cuando haya estudiantes registrados.';
+        chart.appendChild(empty);
+        return;
     }
 
-    return {
-        completed: completedMissions(savedProgress, session?.missions || 0),
-        total: session?.missions || 0,
-        projects: []
-    };
+    projects.forEach(project => {
+        let completedMissionCount = 0;
+        let fullyCompletedStudents = 0;
+        students.forEach(([, student]) => {
+            const summary = progressFor(student, sessionCatalog, sessionId, project.id);
+            completedMissionCount += summary.completed;
+            if (summary.total > 0 && summary.completed === summary.total) fullyCompletedStudents += 1;
+        });
+        const percentage = Math.round(completedMissionCount / (students.length * project.missions) * 100);
+        const row = document.createElement('div');
+        row.className = 'teacher-chart-row';
+        const heading = document.createElement('div');
+        heading.className = 'teacher-chart-heading';
+        const label = document.createElement('strong');
+        label.textContent = project.title.replace(/^\d+\.\s*/, '');
+        const value = document.createElement('span');
+        value.textContent = `${percentage}% · ${fullyCompletedStudents}/${students.length} completaron`;
+        heading.append(label, value);
+
+        const track = document.createElement('div');
+        track.className = 'teacher-chart-track';
+        track.setAttribute('role', 'progressbar');
+        track.setAttribute('aria-label', `Avance promedio: ${label.textContent}`);
+        track.setAttribute('aria-valuemin', '0');
+        track.setAttribute('aria-valuemax', '100');
+        track.setAttribute('aria-valuenow', String(percentage));
+        const fill = document.createElement('span');
+        fill.style.width = `${percentage}%`;
+        track.appendChild(fill);
+        row.append(heading, track);
+        chart.appendChild(row);
+    });
+}
+
+function renderMissionCompletions(events = currentMissionCompletions) {
+    currentMissionCompletions = events;
+    const list = document.getElementById('recent-completions');
+    list.replaceChildren();
+    if (events.length === 0) {
+        const empty = document.createElement('p');
+        empty.className = 'text-sm text-slate-400';
+        empty.textContent = 'Aún no se registran misiones completadas.';
+        list.appendChild(empty);
+        return;
+    }
+
+    events.slice(0, 12).forEach(event => {
+        const item = document.createElement('li');
+        item.className = 'teacher-completion-item';
+        const student = currentStudents[event.student_id];
+        const session = sessionCatalog.find(entry => entry.id === event.session_id);
+        const project = session?.projects.find(entry => entry.id === event.project_id);
+        const description = document.createElement('span');
+        description.textContent = `${student?.name || 'Estudiante'} · ${project?.title.replace(/^\d+\.\s*/, '') || event.project_id} · Misión ${event.mission_id.replace(/^m/, '')}`;
+        const time = document.createElement('time');
+        const completedAt = new Date(event.completed_at);
+        if (Number.isNaN(completedAt.getTime())) {
+            time.textContent = 'Hora no disponible';
+        } else {
+            time.dateTime = completedAt.toISOString();
+            time.textContent = completedAt.toLocaleString('es-PE', {
+                dateStyle: 'short',
+                timeStyle: 'short'
+            });
+        }
+        item.append(description, time);
+        list.appendChild(item);
+    });
 }
 
 function renderStudents(students) {
@@ -101,7 +156,7 @@ function renderStudents(students) {
     const onlineCount = entries.filter(([, student]) => student.online).length;
     const sessionId = document.getElementById('teacher-session').value || sessionCatalog[0].id;
     const projectId = document.getElementById('teacher-project').value || 'all';
-    const summaries = entries.map(([, student]) => progressFor(student, sessionId, projectId));
+    const summaries = entries.map(([, student]) => progressFor(student, sessionCatalog, sessionId, projectId));
     const average = summaries.length
         ? Math.round(summaries.reduce((total, summary) => total + (summary.total ? summary.completed / summary.total : 0), 0) / summaries.length * 100)
         : 0;
@@ -112,8 +167,11 @@ function renderStudents(students) {
     document.getElementById('pending-help-count').textContent = String(
         Object.values(currentHelpRequests).filter(request => request?.status === 'pending').length
     );
+    renderProgressChart(entries, sessionId);
+    renderMissionCompletions();
 
     if (entries.length === 0) {
+        document.getElementById('visible-student-count').textContent = '0 estudiantes';
         const empty = document.createElement('p');
         empty.className = 'text-slate-400';
         empty.textContent = 'Todavía no hay estudiantes registrados en esta clase.';
@@ -125,11 +183,18 @@ function renderStudents(students) {
     const filter = document.getElementById('student-filter').value;
     const filteredEntries = entries.filter(([uid, student]) => {
         const matchesSearch = (student.name || '').toLocaleLowerCase().includes(search);
+        const summary = progressFor(student, sessionCatalog, sessionId, projectId);
+        const percentage = summary.total ? summary.completed / summary.total : 0;
         const matchesFilter = filter === 'online' ? student.online
             : filter === 'help' ? currentHelpRequests[uid]?.status === 'pending'
-                : true;
+                : filter === 'in-progress' ? percentage > 0 && percentage < 1
+                    : filter === 'not-started' ? percentage === 0
+                        : filter === 'complete' ? percentage === 1
+                            : true;
         return matchesSearch && matchesFilter;
     });
+    document.getElementById('visible-student-count').textContent =
+        `${filteredEntries.length} de ${entries.length} estudiantes`;
     filteredEntries.sort(([leftId, left], [rightId, right]) => {
         const leftNeedsHelp = currentHelpRequests[leftId]?.status === 'pending';
         const rightNeedsHelp = currentHelpRequests[rightId]?.status === 'pending';
@@ -163,7 +228,7 @@ function renderStudents(students) {
         helpState.textContent = currentHelpRequests[uid]?.status === 'pending' ? 'Pidió ayuda' : '';
         const session = document.createElement('p');
         session.className = 'text-xs text-slate-400';
-        const summary = progressFor(student, sessionId, projectId);
+        const summary = progressFor(student, sessionCatalog, sessionId, projectId);
         session.textContent = `${sessionTitle}: ${summary.completed}/${summary.total} misiones completadas`;
         const projectProgress = document.createElement('p');
         projectProgress.className = 'mt-1 text-xs text-purple-200';
@@ -186,7 +251,45 @@ function renderStudents(students) {
         const score = document.createElement('span');
         score.className = 'text-lg font-bold text-yellow-300';
         score.textContent = `${percentage}% · ${summary.completed * 10} pts`;
-        card.append(details, score);
+        const management = document.createElement('details');
+        management.className = 'teacher-student-management';
+        const managementSummary = document.createElement('summary');
+        managementSummary.textContent = 'Gestionar perfil';
+        const nameForm = document.createElement('form');
+        nameForm.className = 'teacher-student-name-form';
+        const nameLabel = document.createElement('label');
+        nameLabel.textContent = 'Nombre mostrado';
+        const nameInput = document.createElement('input');
+        nameInput.type = 'text';
+        nameInput.value = student.name || '';
+        nameInput.maxLength = 60;
+        nameInput.required = true;
+        nameInput.autocomplete = 'off';
+        nameInput.setAttribute('aria-label', `Nombre mostrado de ${student.name || 'estudiante'}`);
+        const saveName = document.createElement('button');
+        saveName.type = 'submit';
+        saveName.className = 'teacher-management-button';
+        saveName.textContent = 'Guardar nombre';
+        nameForm.append(nameLabel, nameInput, saveName);
+        nameForm.addEventListener('submit', async event => {
+            event.preventDefault();
+            saveName.disabled = true;
+            saveName.textContent = 'Guardando…';
+            try {
+                await updateStudentNameAsTeacher(uid, nameInput.value);
+                saveName.disabled = false;
+                saveName.textContent = 'Nombre guardado';
+                window.setTimeout(() => {
+                    if (saveName.isConnected) saveName.textContent = 'Guardar nombre';
+                }, 2500);
+            } catch (error) {
+                showError(error);
+                saveName.disabled = false;
+                saveName.textContent = 'Guardar nombre';
+            }
+        });
+        management.append(managementSummary, nameForm);
+        card.append(details, score, management);
 
         grid.appendChild(card);
     });
@@ -279,14 +382,22 @@ function renderHelpRequests(requests) {
     });
 }
 
+function setRealtimeStatus(connected) {
+    const indicator = document.getElementById('teacher-realtime-status');
+    indicator.classList.toggle('is-offline', !connected);
+    indicator.lastChild.textContent = connected ? 'En tiempo real' : 'Conectando…';
+}
+
 function subscribeToClass() {
     stopWatchingStudents?.();
     stopWatchingHelp?.();
-    stopWatchingStudents = watchStudents(renderStudents, showError);
+    stopWatchingCompletions?.();
+    stopWatchingStudents = watchStudents(renderStudents, showError, setRealtimeStatus);
     stopWatchingHelp = watchHelpRequests(requests => {
         renderHelpRequests(requests);
         renderStudents(currentStudents);
     }, showError);
+    stopWatchingCompletions = watchMissionCompletions(renderMissionCompletions, showError);
     watchClassControl(control => {
         const selectedSession = sessionCatalog.find(session => session.id === control.sessionId);
         const selectedProject = selectedSession?.projects.find(project => project.id === control.projectId);
@@ -341,6 +452,37 @@ window.TeacherPanel = {
         } catch (error) {
             showError(error);
         }
+    },
+
+    exportProgressCsv() {
+        const sessionId = document.getElementById('teacher-session').value || sessionCatalog[0].id;
+        const projectId = document.getElementById('teacher-project').value || 'all';
+        const session = sessionCatalog.find(entry => entry.id === sessionId);
+        const projects = session?.projects?.length
+            ? (projectId === 'all' ? session.projects : session.projects.filter(project => project.id === projectId))
+            : [];
+        const headers = ['Nombre', 'Estado de conexión', 'Sesión', 'Avance (%)', 'Misiones completadas', ...projects.map(project => `${project.title} (completadas/total)`)];
+        const rows = Object.values(currentStudents).map(student => {
+            const summary = progressFor(student, sessionCatalog, sessionId, projectId);
+            return [
+                student.name || 'Estudiante',
+                student.online ? 'Conectado' : 'Desconectado',
+                session?.title || sessionId,
+                summary.total ? Math.round(summary.completed / summary.total * 100) : 0,
+                `${summary.completed}/${summary.total}`,
+                ...projects.map(project => {
+                    const projectSummary = progressFor(student, sessionCatalog, sessionId, project.id).projects[0];
+                    return projectSummary ? `${projectSummary.completed}/${projectSummary.total}` : `0/${project.missions}`;
+                })
+            ];
+        });
+        const blob = new Blob([serializeCsv([headers, ...rows])], { type: 'text/csv;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `avance-${sessionId}-${new Date().toISOString().slice(0, 10)}.csv`;
+        link.click();
+        window.setTimeout(() => URL.revokeObjectURL(url), 1000);
     }
 };
 
@@ -353,6 +495,8 @@ try {
         else {
             stopWatchingStudents?.();
             stopWatchingHelp?.();
+            stopWatchingCompletions?.();
+            setRealtimeStatus(false);
         }
     });
 } catch (error) {
