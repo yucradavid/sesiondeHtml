@@ -6,8 +6,11 @@ import {
     trackStudentPresence,
     updateStudentProfile,
     watchClassControl,
-    watchHelpRequest
+    watchHelpRequest,
+    resumeStudent,
+    isSupabaseConfigured
 } from './supabase.js';
+import { avatarStyles, createAvatarSeed, createAvatarValue, setAvatarImage } from './avatar.js';
 
 (function () {
     function countCompleted(value) {
@@ -32,13 +35,14 @@ import {
         currentProject: '',
         currentProjectData: null,
         studentName: '',
-        studentAvatar: '🦊',
+        studentAvatar: createAvatarValue('adventurer', createAvatarSeed()),
         studentId: '',
         presenceSubscription: null,
         progress: {},
         classControl: { active: false },
         classControlSubscription: null,
         state: {},
+        currentMissions: [],
         loadingSession: false,
 
         init() {
@@ -58,14 +62,45 @@ import {
             document.getElementById('project-selector').addEventListener('change', event => {
                 this.loadSession(this.currentSession, event.target.value).catch(error => this.showError(error));
             });
+            document.getElementById('help-form').addEventListener('submit', event => {
+                event.preventDefault();
+                this.submitHelpRequest().catch(error => this.showError(error));
+            });
+            document.getElementById('avatar-form').addEventListener('submit', event => {
+                event.preventDefault();
+                this.saveAvatar().catch(error => this.showError(error));
+            });
+            document.getElementById('student-avatar-style').addEventListener('change', () => this.refreshAvatarPreview());
+            document.getElementById('reroll-avatar').addEventListener('click', () => this.refreshAvatarPreview(true));
+            document.getElementById('profile-avatar-style').addEventListener('change', () => this.refreshProfileAvatarPreview());
+            document.getElementById('reroll-profile-avatar').addEventListener('click', () => this.refreshProfileAvatarPreview(true));
+            document.querySelectorAll('[data-workspace-view]').forEach(button => {
+                button.addEventListener('click', () => this.showWorkspaceView(button.dataset.workspaceView));
+            });
+            this.refreshAvatarPreview();
+            this.showWorkspaceView('panel-editor');
             LabEditor.initResizer();
             this.loadSession('sesion1').catch(error => this.showError(error));
+            if (isSupabaseConfigured()) {
+                resumeStudent().then(saved => {
+                    if (!saved) return;
+                    const avatar = saved.profile.avatar?.includes(':')
+                        ? saved.profile.avatar
+                        : createAvatarValue('adventurer', createAvatarSeed());
+                    return this.enterAsStudent(saved.user, '', avatar);
+                }).catch(error => {
+                    const loginError = document.getElementById('student-login-error');
+                    loginError.textContent = `No se pudo recuperar tu cuenta: ${error.message}`;
+                    loginError.classList.remove('hidden');
+                });
+            }
         },
 
         async initializeSupabase() {
             if (this.classControlSubscription) return;
             this.classControlSubscription = watchClassControl(control => {
                 const sessionChanged = control.sessionId && control.sessionId !== this.currentSession;
+                const projectChanged = control.projectId !== this.classControl.projectId;
                 this.classControl = control;
                 document.getElementById('practice-status').textContent = control.active
                     ? `Práctica en curso: ${SessionRegistry.catalog.find(session => session.id === control.sessionId)?.title || control.sessionId}`
@@ -75,11 +110,24 @@ import {
                     : 'bg-amber-600/20 text-amber-200 px-4 py-2 text-center';
                 this.editor.setOption('readOnly', !this.studentId || !control.active);
                 document.getElementById('reset-button').disabled = !this.studentId || !control.active;
+                const lockHint = document.getElementById('editor-lock-hint');
+                lockHint.classList.toggle('hidden', Boolean(this.studentId && control.active));
+                lockHint.textContent = !this.studentId
+                    ? 'Inicia sesión para participar en la práctica.'
+                    : 'La práctica está en pausa. Espera a que el docente la inicie para editar.';
+                document.getElementById('project-selector').disabled = Boolean(
+                    control.sessionId === this.currentSession
+                    && control.projectId
+                    && control.projectId !== 'all'
+                );
                 if (this.studentId) {
                     updateStudentProfile(this.studentId, { sessionId: control.sessionId || 'sesion1' })
                         .catch(error => this.showError(error));
                 }
-                if (sessionChanged) this.loadSession(control.sessionId).catch(error => this.showError(error));
+                if (sessionChanged || projectChanged) {
+                    const projectId = control.projectId && control.projectId !== 'all' ? control.projectId : '';
+                    this.loadSession(control.sessionId || 'sesion1', projectId).catch(error => this.showError(error));
+                }
             }, error => this.showError(error));
         },
 
@@ -103,12 +151,22 @@ import {
                         option.textContent = project.title;
                         projectSelector.appendChild(option);
                     });
-                    const selectedProject = session.projects.find(project => project.id === projectId)
+                    const assignedProjectId = this.classControl.sessionId === sessionId
+                        && this.classControl.projectId
+                        && this.classControl.projectId !== 'all'
+                        ? this.classControl.projectId
+                        : projectId;
+                    const selectedProject = session.projects.find(project => project.id === assignedProjectId)
                         || session.projects.find(project => project.id === this.currentProject)
                         || session.projects[0];
                     this.currentProject = selectedProject.id;
                     this.currentProjectData = selectedProject;
                     projectSelector.value = selectedProject.id;
+                    projectSelector.disabled = Boolean(
+                        this.classControl.sessionId === sessionId
+                        && this.classControl.projectId
+                        && this.classControl.projectId !== 'all'
+                    );
                     missions = selectedProject.missions;
                     baseHTML = selectedProject.baseHTML;
                     document.getElementById('project-description').textContent = selectedProject.description;
@@ -116,6 +174,7 @@ import {
                     document.getElementById('sidebar-title').textContent = session.title;
                 } else {
                     projectSelectorWrapper.classList.add('hidden');
+                    projectSelector.disabled = false;
                     document.getElementById('project-description').classList.add('hidden');
                     this.currentProject = '';
                     document.getElementById('sidebar-title').textContent = session.title;
@@ -129,6 +188,7 @@ import {
                     mission.id,
                     Boolean(storedProjectProgress[mission.id])
                 ]));
+                this.currentMissions = missions;
                 document.getElementById('session-selector').value = session.id;
                 document.getElementById('editor-project-hint').textContent = this.currentProjectData
                     ? `Proyecto: ${this.currentProjectData.title.replace(/^\d+\.\s*/, '')}`
@@ -148,12 +208,116 @@ import {
                 this.editor.setValue(baseHTML);
                 this.updateIframe(baseHTML);
                 missions.forEach(mission => {
-                    if (this.state[mission.id]) this.markMissionComplete(mission.id);
+                    if (this.state[mission.id]) this.markMissionComplete(mission.id, false);
                 });
                 this.updateRankUI();
             } finally {
                 this.loadingSession = false;
             }
+        },
+
+        refreshAvatarPreview(regenerate = false) {
+            const style = document.getElementById('student-avatar-style').value;
+            const current = this.studentAvatar.split(':').slice(1).join(':');
+            const seed = regenerate || !current ? createAvatarSeed() : current;
+            this.studentAvatar = createAvatarValue(style, seed);
+            const preview = document.getElementById('student-avatar-preview');
+            setAvatarImage(preview, this.studentAvatar);
+        },
+
+        refreshProfileAvatarPreview(regenerate = false) {
+            const style = document.getElementById('profile-avatar-style').value;
+            const current = this.pendingAvatarSeed || createAvatarSeed();
+            this.pendingAvatarSeed = regenerate || !this.pendingAvatarSeed ? createAvatarSeed() : current;
+            setAvatarImage(
+                document.getElementById('profile-avatar-preview'),
+                createAvatarValue(style, this.pendingAvatarSeed)
+            );
+        },
+
+        renderClassmates(classmates) {
+            const lobby = document.getElementById('class-lobby');
+            const roster = document.getElementById('lobby-students');
+            lobby.classList.remove('hidden');
+            roster.replaceChildren();
+            document.getElementById('lobby-summary').textContent =
+                `Lobby de clase · ${classmates.length} ${classmates.length === 1 ? 'compañero conectado' : 'compañeros conectados'}`;
+            if (classmates.length === 0) {
+                const empty = document.createElement('p');
+                empty.className = 'lobby-empty';
+                empty.textContent = 'Todavía no hay compañeros conectados. ¡Avísales que ya estás aquí!';
+                roster.appendChild(empty);
+                return;
+            }
+            classmates.forEach(classmate => {
+                const card = document.createElement('article');
+                card.className = 'lobby-student';
+                const avatar = document.createElement('img');
+                avatar.className = 'lobby-avatar';
+                setAvatarImage(avatar, classmate.avatar);
+                avatar.alt = `Avatar de ${classmate.name}`;
+                avatar.loading = 'lazy';
+                const name = document.createElement('strong');
+                name.textContent = classmate.name;
+                const status = document.createElement('span');
+                status.textContent = 'En la sala';
+                card.append(avatar, name, status);
+                roster.appendChild(card);
+            });
+        },
+
+        openAvatarDialog() {
+            const [style, ...seedParts] = this.studentAvatar.split(':');
+            document.getElementById('profile-avatar-style').value = avatarStyles.includes(style) ? style : 'adventurer';
+            this.pendingAvatarSeed = seedParts.join(':') || createAvatarSeed();
+            this.refreshProfileAvatarPreview();
+            document.getElementById('avatar-form-error').classList.add('hidden');
+            document.getElementById('avatar-dialog').classList.remove('hidden');
+        },
+
+        closeAvatarDialog() {
+            document.getElementById('avatar-dialog').classList.add('hidden');
+        },
+
+        async saveAvatar() {
+            const button = document.getElementById('save-avatar-button');
+            const error = document.getElementById('avatar-form-error');
+            const style = document.getElementById('profile-avatar-style').value;
+            const avatar = createAvatarValue(style, this.pendingAvatarSeed);
+            button.disabled = true;
+            button.textContent = 'Guardando…';
+            error.classList.add('hidden');
+            try {
+                await updateStudentProfile(this.studentId, { avatar });
+                this.studentAvatar = avatar;
+                await this.presenceSubscription?.();
+                this.presenceSubscription = await trackStudentPresence(
+                    { id: this.studentId },
+                    {
+                        name: this.studentName,
+                        avatar,
+                        sessionId: this.classControl.sessionId || this.currentSession,
+                        onClassmates: classmates => this.renderClassmates(classmates)
+                    }
+                );
+                this.updateStudentAvatarInUI();
+                this.closeAvatarDialog();
+            } catch (saveError) {
+                error.textContent = `No se pudo guardar el avatar: ${saveError.message}`;
+                error.classList.remove('hidden');
+            } finally {
+                button.disabled = false;
+                button.textContent = 'Guardar avatar';
+            }
+        },
+
+        updateStudentAvatarInUI() {
+            const badge = document.getElementById('student-avatar-badge');
+            setAvatarImage(badge, this.studentAvatar);
+            badge.alt = `Avatar de ${this.studentName}`;
+            badge.classList.remove('hidden');
+            document.getElementById('student-identity').textContent = this.studentName;
+            document.getElementById('edit-avatar-button').classList.remove('hidden');
         },
 
         handleCodeChange() {
@@ -201,13 +365,13 @@ import {
             }).catch(error => this.showError(error));
         },
 
-        markMissionComplete(missionId) {
+        markMissionComplete(missionId, celebrate = true) {
             const element = document.getElementById(`mission-ui-${missionId}`);
             if (!element) return;
             element.classList.add('completed');
             document.getElementById(`icon-${missionId}`).innerHTML = '<i class="fa-solid fa-check text-white"></i>';
             document.getElementById(`icon-${missionId}`).classList.replace('bg-slate-700', 'bg-green-500');
-            if (typeof confetti === 'function') {
+            if (celebrate && typeof confetti === 'function') {
                 confetti({ particleCount: 50, spread: 60, origin: { y: 0.8 } });
             }
         },
@@ -219,6 +383,16 @@ import {
             const points = countCompleted(this.progress) * 10;
             document.getElementById('points-badge').textContent = `Puntos: ${points}`;
             const percent = total ? completed / total : 0;
+            const progressPercent = Math.round(percent * 100);
+            const progressBar = document.getElementById('mission-progress-bar');
+            document.getElementById('mission-progress-label').textContent = `${completed} de ${total} misiones`;
+            document.getElementById('mission-progress-percent').textContent = `${progressPercent}%`;
+            progressBar.setAttribute('aria-valuenow', String(progressPercent));
+            document.getElementById('mission-progress-fill').style.width = `${progressPercent}%`;
+            const nextMission = this.currentMissions.find(mission => !this.state[mission.id]);
+            document.getElementById('next-mission-hint').textContent = nextMission
+                ? `Siguiente: ${nextMission.title}`
+                : '¡Completaste todas las misiones de esta actividad!';
             if (percent === 0) badge.textContent = 'Rango: Novato 🥚';
             else if (percent < 0.5) badge.textContent = 'Rango: Aprendiz 🐥';
             else if (percent < 1) badge.textContent = 'Rango: Coder 💻';
@@ -226,6 +400,19 @@ import {
                 badge.textContent = 'Rango: Leyenda 👑';
                 document.getElementById('success-banner').classList.remove('hidden');
             }
+        },
+
+        showWorkspaceView(panelId) {
+            document.querySelectorAll('.workspace-tab').forEach(button => {
+                const selected = button.dataset.workspaceView === panelId;
+                button.classList.toggle('active', selected);
+                button.setAttribute('aria-pressed', String(selected));
+            });
+            document.querySelectorAll('.workspace > .panel').forEach(panel => {
+                panel.classList.toggle('mobile-panel-hidden', panel.id !== panelId);
+            });
+            document.getElementById('drag-me').classList.toggle('mobile-panel-hidden', panelId !== 'panel-editor');
+            this.editor?.refresh();
         },
 
         resetSession() {
@@ -267,41 +454,10 @@ import {
             }
             document.getElementById('student-error').classList.add('hidden');
             try {
-                this.studentAvatar = document.getElementById('student-avatar').value;
+                const selectedStyle = document.getElementById('student-avatar-style').value;
+                this.studentAvatar = createAvatarValue(selectedStyle, this.studentAvatar.split(':').slice(1).join(':'));
                 const user = await signInStudent();
-                this.studentId = user.id;
-                this.studentName = name;
-                const student = await enterClassroom(user, name, this.studentAvatar);
-                this.progress = student.progress || {};
-                await updateStudentProfile(user.id, { sessionId: this.classControl.sessionId || 'sesion1' });
-                await this.initializeSupabase();
-                this.presenceSubscription?.();
-                this.presenceSubscription = await trackStudentPresence(user, {
-                    name,
-                    avatar: this.studentAvatar,
-                    sessionId: this.classControl.sessionId || 'sesion1'
-                });
-                document.getElementById('login-modal').classList.add('hidden');
-                document.getElementById('student-identity').textContent = `${this.studentAvatar} ${name}`;
-                document.getElementById('student-login-error').classList.add('hidden');
-                this.editor.setOption('readOnly', !this.classControl.active);
-                document.getElementById('reset-button').disabled = !this.classControl.active;
-                this.loadSession(this.classControl.sessionId || 'sesion1').catch(error => this.showError(error));
-                watchHelpRequest(user.id, request => {
-                    const message = document.getElementById('help-response');
-                    if (request?.teacherMessage) {
-                        message.textContent = `Respuesta del docente: ${request.teacherMessage}`;
-                        message.classList.remove('hidden');
-                    } else {
-                        message.classList.add('hidden');
-                    }
-                    document.getElementById('help-button').disabled = Boolean(request?.status);
-                    document.getElementById('help-button').textContent = request?.status === 'answered'
-                        ? 'El docente respondió'
-                        : request?.status === 'pending'
-                            ? 'Solicitud enviada'
-                            : 'Pedir ayuda al docente';
-                }, error => this.showError(error));
+                await this.enterAsStudent(user, name, this.studentAvatar);
             } catch (error) {
                 const loginError = document.getElementById('student-login-error');
                 loginError.textContent = `No se pudo conectar: ${error.message}`;
@@ -309,25 +465,90 @@ import {
             }
         },
 
+        async enterAsStudent(user, name, avatar) {
+            this.studentId = user.id;
+            const student = await enterClassroom(user, name, avatar);
+            this.studentName = student.name;
+            this.studentAvatar = student.avatar;
+            this.progress = student.progress || {};
+            await this.initializeSupabase();
+            await this.presenceSubscription?.();
+            this.presenceSubscription = await trackStudentPresence(user, {
+                name: this.studentName,
+                avatar: this.studentAvatar,
+                sessionId: this.classControl.sessionId || student.sessionId,
+                onClassmates: classmates => this.renderClassmates(classmates)
+            });
+            document.getElementById('login-modal').classList.add('hidden');
+            document.getElementById('student-login-error').classList.add('hidden');
+            this.updateStudentAvatarInUI();
+            document.getElementById('editor-lock-hint').classList.toggle('hidden', Boolean(this.classControl.active));
+            this.editor.setOption('readOnly', !this.classControl.active);
+            document.getElementById('reset-button').disabled = !this.classControl.active;
+            document.getElementById('help-button').disabled = false;
+            this.loadSession(this.classControl.sessionId || student.sessionId).catch(error => this.showError(error));
+            watchHelpRequest(user.id, request => {
+                const message = document.getElementById('help-response');
+                if (request?.teacherMessage) {
+                    message.textContent = `Respuesta del docente: ${request.teacherMessage}`;
+                    message.classList.remove('hidden');
+                } else {
+                    message.classList.add('hidden');
+                }
+                document.getElementById('help-button').disabled = request?.status === 'pending';
+                document.getElementById('help-button').textContent = request?.status === 'answered'
+                    ? 'Pedir otra ayuda'
+                    : request?.status === 'pending'
+                        ? 'Solicitud enviada'
+                        : 'Pedir ayuda al docente';
+            }, error => this.showError(error));
+        },
+
         async askForHelp() {
             if (!this.studentId) return;
-            const answer = window.prompt('¿En qué necesitas ayuda? (opcional)', '');
-            if (answer === null) return;
-            const message = (answer.trim() || 'Necesito ayuda con la práctica.').slice(0, 300);
+            const dialog = document.getElementById('help-dialog');
+            document.getElementById('help-form-error').classList.add('hidden');
+            document.getElementById('help-message').value = '';
+            dialog.classList.remove('hidden');
+            document.getElementById('help-message').focus();
+        },
+
+        closeHelpDialog() {
+            document.getElementById('help-dialog').classList.add('hidden');
+        },
+
+        async submitHelpRequest() {
+            if (!this.studentId) return;
+            const sendButton = document.getElementById('send-help-button');
+            const errorElement = document.getElementById('help-form-error');
+            const message = document.getElementById('help-message').value.trim() || 'Necesito ayuda con la práctica.';
+            sendButton.disabled = true;
+            sendButton.textContent = 'Enviando…';
             try {
                 await requestTeacherHelp(this.studentId, {
                     name: this.studentName,
                     avatar: this.studentAvatar,
-                    message
+                    message: message.slice(0, 300)
                 });
+                this.closeHelpDialog();
+                document.getElementById('help-response').textContent = 'Solicitud enviada. El docente te responderá aquí.';
+                document.getElementById('help-response').classList.remove('hidden');
             } catch (error) {
-                this.showError(error);
+                errorElement.textContent = `No se pudo enviar: ${error.message}`;
+                errorElement.classList.remove('hidden');
+            } finally {
+                sendButton.disabled = false;
+                sendButton.textContent = 'Enviar solicitud';
             }
         },
 
         showError(error) {
             console.error('Error en el laboratorio:', error);
-            alert(`No se pudo completar la operación: ${error.message}`);
+            const toast = document.getElementById('student-toast');
+            toast.textContent = `No se pudo completar la operación: ${error.message}`;
+            toast.classList.remove('hidden');
+            window.clearTimeout(this.toastTimeout);
+            this.toastTimeout = window.setTimeout(() => toast.classList.add('hidden'), 6000);
         }
     };
 

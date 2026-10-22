@@ -35,6 +35,10 @@ function isTeacher(user) {
     return user?.email?.toLowerCase() === teacherEmail.toLowerCase();
 }
 
+export function isSupabaseConfigured() {
+    return isConfigured;
+}
+
 export async function signInStudent() {
     const supabase = getSupabase();
     const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
@@ -49,6 +53,22 @@ export async function signInStudent() {
     throwIfError(error);
     if (!data.user) throw new Error('Supabase no devolvió la sesión del estudiante.');
     return data.user;
+}
+
+export async function resumeStudent() {
+    const supabase = getSupabase();
+    const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+    throwIfError(sessionError);
+    const user = sessionData.session?.user;
+    if (!user?.is_anonymous) return null;
+
+    const { data: profile, error } = await supabase
+        .from('students')
+        .select('name, avatar, progress')
+        .eq('id', user.id)
+        .maybeSingle();
+    throwIfError(error);
+    return profile ? { user, profile } : null;
 }
 
 export async function signInTeacher(email, password) {
@@ -85,7 +105,7 @@ export async function enterClassroom(user, name, avatar) {
     const supabase = getSupabase();
     const { data: previous, error: readError } = await supabase
         .from('students')
-        .select('progress')
+        .select('name, avatar, progress')
         .eq('id', user.id)
         .maybeSingle();
     throwIfError(readError);
@@ -97,16 +117,26 @@ export async function enterClassroom(user, name, avatar) {
         .maybeSingle();
     throwIfError(controlError);
 
+    const studentName = name.trim() || previous?.name;
+    if (!studentName) throw new Error('Escribe tu nombre para crear tu cuenta de estudiante.');
+    const studentAvatar = avatar || (previous?.avatar && previous.avatar.includes(':')
+        ? previous.avatar
+        : 'adventurer:student');
     const { error } = await supabase.from('students').upsert({
         id: user.id,
-        name,
-        avatar,
+        name: studentName,
+        avatar: studentAvatar,
         session_id: control?.session_id || 'sesion1',
         progress: previous?.progress || {},
         updated_at: new Date().toISOString()
     });
     throwIfError(error);
-    return { progress: previous?.progress || {} };
+    return {
+        name: studentName,
+        avatar: studentAvatar,
+        progress: previous?.progress || {},
+        sessionId: control?.session_id || 'sesion1'
+    };
 }
 
 export function watchClassControl(callback, onError) {
@@ -116,7 +146,7 @@ export function watchClassControl(callback, onError) {
     const publish = async () => {
         const { data, error } = await supabase
             .from('classroom_control')
-            .select('active, session_id, updated_at')
+            .select('active, session_id, project_id, updated_at')
             .eq('id', 1)
             .maybeSingle();
         if (error) {
@@ -124,8 +154,8 @@ export function watchClassControl(callback, onError) {
             return;
         }
         if (active) callback(data
-            ? { active: data.active, sessionId: data.session_id }
-            : { active: false, sessionId: 'sesion1' });
+            ? { active: data.active, sessionId: data.session_id, projectId: data.project_id || 'all' }
+            : { active: false, sessionId: 'sesion1', projectId: 'all' });
     };
 
     publish();
@@ -284,6 +314,7 @@ export async function updateClassControl(control) {
         id: 1,
         active: Boolean(control.active),
         session_id: control.sessionId || 'sesion1',
+        project_id: control.projectId || 'all',
         updated_at: new Date().toISOString()
     });
     throwIfError(error);
@@ -294,6 +325,7 @@ export async function updateStudentProfile(userId, profile) {
     if (user.id !== userId) throw new Error('No puedes cambiar el perfil de otro estudiante.');
     const updates = {};
     if (profile.sessionId) updates.session_id = profile.sessionId;
+    if (profile.avatar) updates.avatar = profile.avatar;
     if (!Object.keys(updates).length) return;
     const { error } = await getSupabase()
         .from('students')
@@ -358,6 +390,19 @@ export async function trackStudentPresence(user, profile) {
         config: { presence: { key: user.id } }
     });
     await new Promise((resolve, reject) => {
+        channel.on('presence', { event: 'sync' }, () => {
+            const classmatesById = new Map();
+            Object.values(channel.presenceState()).flat().forEach(present => {
+                if (!present.userId || present.userId === user.id) return;
+                classmatesById.set(present.userId, {
+                    userId: present.userId,
+                    name: present.name || 'Estudiante',
+                    avatar: present.avatar || 'adventurer:student',
+                    sessionId: present.sessionId || 'sesion1'
+                });
+            });
+            profile.onClassmates?.([...classmatesById.values()]);
+        });
         channel.subscribe(async status => {
             if (status === 'SUBSCRIBED') {
                 const { error } = await channel.track({
@@ -373,7 +418,7 @@ export async function trackStudentPresence(user, profile) {
             }
         });
     });
-    return () => {
-        supabase.removeChannel(channel);
+    return async () => {
+        await supabase.removeChannel(channel);
     };
 }

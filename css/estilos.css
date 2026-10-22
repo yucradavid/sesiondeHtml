@@ -37,3 +37,69 @@ iframe { width: 100%; height: 100%; border: none; background: #fff; }
 
 #teacher-dashboard { min-height: 100vh; background: var(--bg-dark); padding: 20px; }
 .student-card { background: var(--panel-bg); border: 1px solid var(--border-color); border-radius: 8px; padding: 15px; }
+
+.mission-progress { margin: 12px; padding: 12px; border: 1px solid var(--border-color); border-radius: 8px; background: #172033; color: #cbd5e1; font-size: 12px; }
+.progress-track, .teacher-progress-track { overflow: hidden; height: 8px; border-radius: 999px; background: #334155; }
+.progress-track { margin-top: 8px; }
+.progress-track span, .teacher-progress-track span { display: block; height: 100%; border-radius: inherit; background: #a78bfa; transition: width 250ms ease; }
+.mission-item { border-radius: 8px; }
+.mission-item.completed { border-left: 4px solid #22c55e; }
+.editor-lock-hint { padding: 10px 14px; background: #422006; color: #fde68a; font-size: 13px; }
+.app-toast { position: fixed; right: 20px; bottom: 20px; z-index: 1200; max-width: min(420px, calc(100vw - 40px)); padding: 14px 18px; border: 1px solid #f87171; border-radius: 8px; background: #7f1d1d; color: #fff; box-shadow: 0 10px 30px rgba(0,0,0,.35); }
+.mobile-workspace-tabs { display: none; }
+.teacher-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.teacher-stat { display: flex; flex-direction: column; gap: 4px; padding: 16px; border: 1px solid var(--border-color); border-radius: 8px; background: var(--panel-bg); color: #94a3b8; }
+.teacher-stat strong { color: #fff; font-size: 1.5rem; }
+.teacher-progress-track { width: min(220px, 100%); margin-top: 10px; }
+.teacher-progress-track span { background: #34d399; }
+.student-avatar-badge { width: 42px; height: 42px; border: 2px solid #a78bfa; border-radius: 50%; background: #334155; }
+.avatar-picker { display: grid; grid-template-columns: 104px minmax(0, 1fr); align-items: center; gap: 16px; margin: 16px 0; text-align: left; }
+.avatar-picker img { width: 104px; height: 104px; border: 2px solid #a78bfa; border-radius: 18px; background: #334155; }
+.class-lobby { margin: 8px 12px; border: 1px solid var(--border-color); border-radius: 10px; background: #172033; }
+.class-lobby > summary { padding: 10px 14px; color: #ddd6fe; cursor: pointer; font-weight: 700; }
+.lobby-scene { display: flex; flex-wrap: wrap; gap: 10px; padding: 12px; background: radial-gradient(ellipse at bottom, #14532d 0, #172033 72%); border-radius: 0 0 10px 10px; }
+.lobby-student { display: grid; justify-items: center; gap: 4px; min-width: 92px; padding: 8px; color: #f8fafc; font-size: 12px; }
+.lobby-avatar { width: 64px; height: 64px; border: 2px solid #86efac; border-radius: 50%; background: #334155; transition: transform 180ms ease; }
+.lobby-student:hover .lobby-avatar { transform: translateY(-4px) scale(1.06); }
+.lobby-student span { color: #86efac; font-size: 11px; }
+.lobby-empty { color: #cbd5e1; font-size: 13px; }
+.teacher-student-identity, .teacher-help-title { display: flex; align-items: center; gap: 10px; }
+.teacher-student-avatar { width: 44px; height: 44px; flex: 0 0 auto; border: 2px solid #64748b; border-radius: 50%; background: #334155; }
+.teacher-help-title .teacher-student-avatar { width: 36px; height: 36px; }
+button, select, input, textarea { transition: border-color 150ms ease, background-color 150ms ease, opacity 150ms ease; }
+button:focus-visible, select:focus-visible, input:focus-visible, textarea:focus-visible, a:focus-visible { outline: 2px solid #a78bfa; outline-offset: 2px; }
+button:disabled { cursor: not-allowed; opacity: .6; }
+
+@media (max-width: 900px) {
+    .student-lab { height: 100dvh; overflow: hidden; }
+    body > header { flex-wrap: wrap; gap: 10px; }
+    body > header > div { flex-wrap: wrap; }
+    .workspace { min-height: 0; }
+    .panel-sidebar { width: 290px; }
+    .mobile-workspace-tabs { display: flex; gap: 6px; padding: 8px; background: #111827; }
+    .workspace-tab { flex: 1; padding: 9px 6px; border: 1px solid #334155; border-radius: 6px; background: #1e293b; color: #cbd5e1; }
+    .workspace-tab.active { border-color: #a78bfa; background: #4c1d95; color: #fff; }
+    .workspace { position: relative; }
+    .workspace > .panel { flex: 1; width: 100%; min-width: 0; border: 0; }
+    .workspace > .panel.mobile-panel-hidden, .resizer.mobile-panel-hidden { display: none; }
+    .resizer { display: none; }
+    .panel-sidebar { width: 100%; }
+}
+
+@media (max-width: 680px) {
+    .student-lab { height: 100dvh; }
+    body > header { padding: 10px; }
+    body > header > div:first-child { width: 100%; justify-content: space-between; }
+    body > header > div:last-child { width: 100%; justify-content: space-between; gap: 8px; }
+    body > header > div:last-child > * { font-size: 12px; padding: 6px 8px; }
+    #student-identity { width: 100%; }
+    #practice-status { flex: 1; }
+    .CodeMirror { font-size: 14px; }
+    .editor-help { font-size: 11px; }
+    #teacher-dashboard { padding: 12px; }
+    .teacher-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; }
+}

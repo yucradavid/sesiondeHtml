@@ -2,8 +2,12 @@ create table if not exists public.classroom_control (
     id integer primary key check (id = 1),
     active boolean not null default false,
     session_id text not null default 'sesion1' check (session_id in ('sesion1', 'sesion2')),
+    project_id text not null default 'all',
     updated_at timestamptz not null default now()
 );
+
+alter table public.classroom_control
+    add column if not exists project_id text not null default 'all';
 
 insert into public.classroom_control (id, active, session_id)
 values (1, false, 'sesion1')
@@ -12,11 +16,15 @@ on conflict (id) do nothing;
 create table if not exists public.students (
     id uuid primary key references auth.users (id) on delete cascade,
     name text not null check (char_length(name) between 1 and 60),
-    avatar text not null check (char_length(avatar) <= 8),
+    avatar text not null check (char_length(avatar) <= 120),
     session_id text not null default 'sesion1' check (session_id in ('sesion1', 'sesion2')),
     progress jsonb not null default '{}'::jsonb,
     updated_at timestamptz not null default now()
 );
+
+alter table public.students drop constraint if exists students_avatar_check;
+alter table public.students
+    add constraint students_avatar_check check (char_length(avatar) <= 120);
 
 create table if not exists public.help_requests (
     student_id uuid primary key references auth.users (id) on delete cascade,
