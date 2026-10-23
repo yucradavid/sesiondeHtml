@@ -1,7 +1,7 @@
 create table if not exists public.classroom_control (
     id integer primary key check (id = 1),
     active boolean not null default false,
-    session_id text not null default 'sesion1' check (session_id in ('sesion1', 'sesion2')),
+    session_id text not null default 'sesion1' check (session_id ~ '^sesion[1-9][0-9]*$'),
     project_id text not null default 'all',
     updated_at timestamptz not null default now()
 );
@@ -17,7 +17,7 @@ create table if not exists public.students (
     id uuid primary key references auth.users (id) on delete cascade,
     name text not null check (char_length(name) between 1 and 60),
     avatar text not null check (char_length(avatar) <= 120),
-    session_id text not null default 'sesion1' check (session_id in ('sesion1', 'sesion2')),
+    session_id text not null default 'sesion1' check (session_id ~ '^sesion[1-9][0-9]*$'),
     progress jsonb not null default '{}'::jsonb,
     updated_at timestamptz not null default now()
 );
@@ -38,7 +38,7 @@ create table if not exists public.help_requests (
 create table if not exists public.mission_completions (
     id uuid primary key default gen_random_uuid(),
     student_id uuid not null references public.students (id) on delete cascade,
-    session_id text not null check (session_id in ('sesion1', 'sesion2')),
+    session_id text not null check (session_id ~ '^sesion[1-9][0-9]*$'),
     project_id text not null check (char_length(project_id) between 1 and 80),
     mission_id text not null check (mission_id ~ '^m[1-9][0-9]*$'),
     completed_at timestamptz not null default now()
@@ -48,6 +48,17 @@ create unique index if not exists mission_completions_student_mission_idx
     on public.mission_completions (student_id, session_id, project_id, mission_id);
 create index if not exists mission_completions_completed_at_idx
     on public.mission_completions (completed_at desc);
+
+-- Acepta cualquier sesión registrada en js/sesiones/index.js (sesion1, sesion2, sesion3…).
+alter table public.classroom_control drop constraint if exists classroom_control_session_id_check;
+alter table public.classroom_control
+    add constraint classroom_control_session_id_check check (session_id ~ '^sesion[1-9][0-9]*$');
+alter table public.students drop constraint if exists students_session_id_check;
+alter table public.students
+    add constraint students_session_id_check check (session_id ~ '^sesion[1-9][0-9]*$');
+alter table public.mission_completions drop constraint if exists mission_completions_session_id_check;
+alter table public.mission_completions
+    add constraint mission_completions_session_id_check check (session_id ~ '^sesion[1-9][0-9]*$');
 
 alter table public.classroom_control enable row level security;
 alter table public.students enable row level security;

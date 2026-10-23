@@ -34,19 +34,19 @@
         <section id="teacher-dashboard" class="hidden">
             <div class="student-card flex flex-wrap items-center justify-between gap-4 mb-6">
                 <div>
-                    <h2 class="text-xl font-bold text-white">Control de la práctica</h2>
+                    <h2 class="text-xl font-bold text-white">Control de la clase</h2>
                     <p id="class-status" class="mt-1 text-slate-300">Conectando…</p>
                     <p id="student-count" class="mt-1 text-sm text-green-300">Conectados: 0 / 0</p>
                 </div>
                 <div class="flex flex-wrap items-center gap-3">
-                    <label class="sr-only" for="teacher-session">Sesión de práctica</label>
+                    <label class="sr-only" for="teacher-session">Sesión</label>
                     <select id="teacher-session" class="rounded border border-slate-600 bg-slate-800 p-3 text-white"></select>
                     <label class="sr-only" for="teacher-project">Subsesión habilitada</label>
                     <select id="teacher-project" class="rounded border border-slate-600 bg-slate-800 p-3 text-white" aria-describedby="teacher-project-help"></select>
-                    <button id="start-class" onclick="TeacherPanel.toggleClass()" class="rounded bg-green-600 px-4 py-3 font-bold text-white">Dar comienzo a la práctica</button>
-                    <button onclick="TeacherPanel.logout()" class="rounded bg-slate-600 px-4 py-3 text-white">Cerrar sesión docente</button>
+                    <button id="start-class" onclick="TeacherPanel.toggleClass()" class="rounded bg-green-600 px-4 py-3 font-bold text-white">Iniciar la clase</button>
+                    <button onclick="TeacherPanel.logout()" class="rounded bg-slate-600 px-4 py-3 text-white">Salir del panel</button>
                 </div>
-                <p id="teacher-project-help" class="mt-3 w-full text-sm text-slate-400">Elige una subsesión para trabajar solo en ella o habilita todas. Pausa la práctica para cambiar la asignación.</p>
+                <p id="teacher-project-help" class="mt-3 w-full text-sm text-slate-400">Elige una subsesión para trabajar solo en ella o habilita todas. Pausa la clase para cambiar la asignación.</p>
             </div>
 
             <section class="teacher-stats mb-6" aria-label="Resumen del grupo">
@@ -110,6 +110,7 @@
         </section>
     </main>
 
+    <script src="js/sesiones/index.js"></script>
     <script type="module" src="js/core/teacher.js"></script>
 </body>
 </html>

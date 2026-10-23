@@ -341,12 +341,81 @@ body.student-lab .mission-item.completed {
     border-left: 4px solid #16a387;
     background: #effbf6;
 }
-body.student-lab #project-selector {
-    border-color: #dce3f2;
-    background: #f8f9ff;
-    color: #29395f;
-}
-body.student-lab #success-banner { border-color: #a7e6d3; background: #e9fbf4; color: #087e69; }
+body.student-lab .tag-badge { background: #edf2ff; color: #4338ca; }
+
+/* Sesiones guiadas: ficha, mapa de subsesiones, misiones con pistas y cierre. */
+body.student-lab .session-scroll { display: flex; min-height: 0; flex: 1; flex-direction: column; gap: 10px; overflow-y: auto; padding: 10px; }
+body.student-lab .session-scroll .mission-progress { margin: 0; }
+body.student-lab .session-brief { padding: 12px; border: 1px solid #e4e2fb; border-radius: 12px; background: #f7f6ff; color: #29395f; }
+body.student-lab .session-brief-eyebrow { color: #514bd2; font-size: 11px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
+body.student-lab .session-purpose { margin-top: 4px; font-size: 14px; font-weight: 700; line-height: 1.4; }
+body.student-lab .session-brief-details { margin-top: 8px; font-size: 13px; }
+body.student-lab .session-brief-details > summary,
+body.student-lab .quick-help > summary,
+body.student-lab .editor-help > summary { width: fit-content; cursor: pointer; color: #514bd2; font-weight: 700; }
+body.student-lab .session-brief-details dl { display: grid; gap: 4px; margin-top: 8px; }
+body.student-lab .session-brief-details dt { margin-top: 6px; color: #52627f; font-size: 11px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
+body.student-lab .session-brief-details dd { margin: 0; color: #29395f; line-height: 1.45; }
+body.student-lab .chip-list { display: flex; flex-wrap: wrap; gap: 4px; margin: 0; padding: 0; list-style: none; }
+body.student-lab .chip-list li { padding: 2px 8px; border-radius: 999px; background: #e9e7ff; color: #4338ca; font-size: 12px; font-weight: 700; }
+body.student-lab .chip-list--code li { font-family: Consolas, monospace; font-weight: 600; }
+body.student-lab .criteria-list { display: grid; gap: 4px; margin: 0; padding-left: 18px; list-style: disc; }
+
+body.student-lab .subsession-roadmap { display: grid; gap: 6px; }
+body.student-lab .roadmap-step { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 10px; width: 100%; padding: 8px 10px; border: 1px solid #e3e8f3; border-radius: 12px; background: #fff; color: #29395f; text-align: left; }
+body.student-lab .roadmap-step:hover:not(:disabled) { border-color: #c9c6f5; background: #f8f7ff; }
+body.student-lab .roadmap-number { display: grid; min-width: 34px; height: 34px; place-items: center; border-radius: 999px; background: #eef1f8; color: #465573; font-size: 12px; font-weight: 800; }
+body.student-lab .roadmap-text { display: grid; min-width: 0; }
+body.student-lab .roadmap-text strong { overflow: hidden; font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
+body.student-lab .roadmap-text small { color: #63718c; font-size: 11px; }
+body.student-lab .roadmap-state { font-size: 11px; font-weight: 800; }
+body.student-lab .roadmap-step.is-current { border-color: #5b55e7; background: #f1efff; box-shadow: 0 0 0 2px rgba(91, 85, 231, .15); }
+body.student-lab .roadmap-step.is-current .roadmap-number { background: #5b55e7; color: #fff; }
+body.student-lab .roadmap-step.is-current .roadmap-state { color: #4338ca; }
+body.student-lab .roadmap-step.is-done .roadmap-number { background: #dff6ee; color: #087e69; }
+body.student-lab .roadmap-step.is-done .roadmap-state { color: #087e69; }
+body.student-lab .roadmap-step.is-challenge:not(.is-current) { border-style: dashed; }
+body.student-lab .roadmap-step:disabled { cursor: not-allowed; opacity: .55; }
+
+body.student-lab .subsession-info h3 { color: #202d55; font-size: 15px; font-weight: 800; }
+body.student-lab .subsession-info p { margin-top: 2px; color: #52627f; font-size: 13px; line-height: 1.45; }
+body.student-lab .subsession-learn { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 8px; color: #52627f; font-size: 12px; font-weight: 700; }
+
+body.student-lab .missions-list { display: grid; gap: 8px; }
+body.student-lab .mission-item { padding: 0; border-radius: 12px; }
+body.student-lab .mission-summary { display: flex; align-items: center; gap: 10px; padding: 10px 12px; cursor: pointer; list-style: none; font-size: 13px; font-weight: 700; }
+body.student-lab .mission-summary::-webkit-details-marker { display: none; }
+body.student-lab .mission-marker { display: grid; width: 26px; height: 26px; flex: 0 0 auto; place-items: center; border-radius: 999px; background: #eef1f8; color: #465573; font-size: 12px; font-weight: 800; }
+body.student-lab .mission-title { min-width: 0; flex: 1; }
+body.student-lab .mission-state { padding: 2px 8px; border-radius: 999px; background: #5b55e7; color: #fff; font-size: 11px; font-weight: 800; }
+body.student-lab .mission-item.current { border-color: #b9b5f6; box-shadow: 0 4px 14px rgba(91, 85, 231, .12); }
+body.student-lab .mission-item.current .mission-marker { background: #5b55e7; color: #fff; }
+body.student-lab .mission-item.completed .mission-marker { background: #16a387; color: #fff; }
+body.student-lab .mission-item:not(.current):not(.completed) .mission-title { color: #52627f; }
+body.student-lab .mission-body { padding: 0 12px 12px 48px; font-size: 13px; }
+body.student-lab .mission-item .mission-desc { color: #3f4d6b; line-height: 1.5; }
+body.student-lab .mission-hints { display: grid; gap: 6px; margin: 8px 0 0; padding: 0; list-style: none; }
+body.student-lab .mission-hints li { padding: 8px 10px; border-left: 3px solid #f5bd42; border-radius: 8px; background: #fff8e6; color: #5c4510; line-height: 1.45; }
+body.student-lab .mission-body code,
+body.student-lab .quick-help code { padding: 1px 4px; border-radius: 4px; background: #edf2ff; color: #4338ca; font-family: Consolas, monospace; font-size: 12px; }
+body.student-lab .mission-hint-button { margin-top: 8px; padding: 6px 10px; border: 1px solid #f4dfa2; border-radius: 999px; background: #fff8e6; color: #79540b; font-size: 12px; font-weight: 700; }
+body.student-lab .mission-hint-button[hidden] { display: none; }
+
+body.student-lab .session-success { display: grid; gap: 10px; padding: 14px; border: 1px solid #a7e6d3; border-radius: 12px; background: #e9fbf4; color: #087e69; font-size: 13px; }
+body.student-lab .session-success-title { font-size: 15px; font-weight: 800; text-align: center; }
+body.student-lab .session-next-button { padding: 9px 12px; border: 0; border-radius: 999px; background: #087e69; color: #fff; font-weight: 800; }
+body.student-lab .session-closing { padding: 12px; border-radius: 10px; background: #fff; color: #29395f; }
+body.student-lab .session-closing h3 { color: #202d55; font-size: 14px; font-weight: 800; }
+body.student-lab .session-closing p { margin-top: 4px; color: #52627f; }
+body.student-lab .session-closing ol { display: grid; gap: 4px; margin: 8px 0; padding-left: 20px; list-style: decimal; }
+
+body.student-lab .quick-help { padding: 10px 12px; border: 1px solid #e8ecf5; border-radius: 12px; background: #f9faff; color: #52627f; font-size: 13px; }
+body.student-lab .quick-help ul { display: grid; gap: 4px; margin-top: 8px; padding-left: 18px; list-style: disc; }
+
+body.student-lab .lobby-session-brief { max-width: 600px; margin-top: 14px; padding: 12px 14px; border: 1px solid #e4e2fb; border-radius: 12px; background: #f7f6ff; }
+body.student-lab .lobby-session-brief h3 { margin: 2px 0 4px; color: #24325a; font-size: 1.05rem; font-weight: 800; }
+body.student-lab .lobby-session-question { margin-top: 8px; font-size: 14px; }
+body.student-lab .lobby-session-question strong { color: #4338ca; }
 
 body.student-lab .mobile-workspace-tabs { background: #fff; box-shadow: 0 -2px 12px rgba(36, 55, 100, .06); }
 body.student-lab .workspace-tab {

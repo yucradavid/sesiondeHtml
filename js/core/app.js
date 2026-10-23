@@ -20,6 +20,37 @@ import { avatarStyles, createAvatarCharacter, createAvatarSeed, createAvatarValu
         return Object.values(value).reduce((total, child) => total + countCompleted(child), 0);
     }
 
+    function withoutLegacyMissionKeys(progress) {
+        return Object.fromEntries(Object.entries(progress).filter(([key]) => !/^m\d+$/.test(key)));
+    }
+
+    // El código de cada subsesión se guarda en este navegador, igual que la cuenta anónima.
+    const CODE_STORAGE_PREFIX = 'academia-web:codigo';
+
+    function readStoredCode(key) {
+        try {
+            return window.localStorage.getItem(key);
+        } catch (error) {
+            return null;
+        }
+    }
+
+    function writeStoredCode(key, code) {
+        try {
+            window.localStorage.setItem(key, code);
+        } catch (error) {
+            console.warn('No se pudo guardar el código en este navegador.', error.message);
+        }
+    }
+
+    function fillTextList(element, items) {
+        element.replaceChildren(...items.map(item => {
+            const entry = document.createElement('li');
+            entry.textContent = item;
+            return entry;
+        }));
+    }
+
     const PREVIEW_STYLES = `
         <style>
             body { font-family: 'Segoe UI', sans-serif; padding: 20px; line-height: 1.6; }
@@ -33,8 +64,12 @@ import { avatarStyles, createAvatarCharacter, createAvatarSeed, createAvatarValu
     window.SystemApp = {
         editor: null,
         currentSession: 'sesion1',
+        currentSessionData: null,
         currentProject: '',
         currentProjectData: null,
+        hintsShown: {},
+        codeSaveTimer: null,
+        pendingCodeSave: null,
         studentName: '',
         studentAvatar: createAvatarValue('adventurer', createAvatarSeed()),
         studentId: '',
@@ -60,9 +95,21 @@ import { avatarStyles, createAvatarCharacter, createAvatarSeed, createAvatarValu
                 selector.appendChild(option);
             });
             selector.disabled = true;
-            document.getElementById('project-selector').addEventListener('change', event => {
-                this.loadSession(this.currentSession, event.target.value).catch(error => this.showError(error));
+            document.getElementById('subsession-roadmap').addEventListener('click', event => {
+                const step = event.target.closest('[data-project-id]');
+                if (!step || step.disabled || step.dataset.projectId === this.currentProject) return;
+                this.loadSession(this.currentSession, step.dataset.projectId).catch(error => this.showError(error));
             });
+            document.getElementById('missions-container').addEventListener('click', event => {
+                const hintButton = event.target.closest('.mission-hint-button');
+                if (hintButton) this.showNextHint(hintButton.dataset.missionId);
+            });
+            document.getElementById('success-banner').addEventListener('click', event => {
+                const nextButton = event.target.closest('[data-next-project-id]');
+                if (!nextButton) return;
+                this.loadSession(this.currentSession, nextButton.dataset.nextProjectId).catch(error => this.showError(error));
+            });
+            window.addEventListener('pagehide', () => this.flushCodeSave());
             document.getElementById('help-form').addEventListener('submit', event => {
                 event.preventDefault();
                 this.submitHelpRequest().catch(error => this.showError(error));
@@ -109,8 +156,8 @@ import { avatarStyles, createAvatarCharacter, createAvatarSeed, createAvatarValu
                 this.classControl = control;
                 this.setWaitingRoom(!control.active);
                 document.getElementById('practice-status').textContent = control.active
-                    ? `Práctica en curso: ${SessionRegistry.catalog.find(session => session.id === control.sessionId)?.title || control.sessionId}`
-                    : 'La práctica todavía no ha comenzado. Espera a que el docente la inicie.';
+                    ? `Clase en curso: ${SessionRegistry.catalog.find(session => session.id === control.sessionId)?.title || control.sessionId}`
+                    : 'La clase todavía no ha comenzado. Espera a que el docente la inicie.';
                 document.getElementById('practice-status').className = control.active
                     ? 'bg-green-600/20 text-green-300 px-4 py-2 text-center'
                     : 'bg-amber-600/20 text-amber-200 px-4 py-2 text-center';
@@ -119,13 +166,9 @@ import { avatarStyles, createAvatarCharacter, createAvatarSeed, createAvatarValu
                 const lockHint = document.getElementById('editor-lock-hint');
                 lockHint.classList.toggle('hidden', Boolean(this.studentId && control.active));
                 lockHint.textContent = !this.studentId
-                    ? 'Inicia sesión para participar en la práctica.'
-                    : 'La práctica está en pausa. Espera a que el docente la inicie para editar.';
-                document.getElementById('project-selector').disabled = Boolean(
-                    control.sessionId === this.currentSession
-                    && control.projectId
-                    && control.projectId !== 'all'
-                );
+                    ? 'Entra con tu nombre para participar en la clase.'
+                    : 'La clase está en pausa. Espera a que el docente la inicie para editar.';
+                this.renderRoadmap();
                 if (this.studentId) {
                     updateStudentProfile(this.studentId, { sessionId: control.sessionId || 'sesion1' })
                         .catch(error => this.showError(error));
@@ -138,54 +181,29 @@ import { avatarStyles, createAvatarCharacter, createAvatarSeed, createAvatarValu
         },
 
         async loadSession(sessionId, projectId = '') {
+            this.flushCodeSave();
             this.loadingSession = true;
             try {
                 const session = await SessionRegistry.load(sessionId);
                 this.currentSession = session.id;
-                const projectSelector = document.getElementById('project-selector');
-                const projectSelectorWrapper = document.getElementById('project-selector-wrapper');
+                this.currentSessionData = session;
                 let missions = session.missions;
                 let baseHTML = session.baseHTML;
                 this.currentProjectData = null;
                 const hasProjects = Array.isArray(session.projects) && session.projects.length > 0;
 
                 if (hasProjects) {
-                    projectSelectorWrapper.classList.remove('hidden');
-                    projectSelector.replaceChildren();
-                    session.projects.forEach(project => {
-                        const option = document.createElement('option');
-                        option.value = project.id;
-                        option.textContent = project.title;
-                        projectSelector.appendChild(option);
-                    });
-                    const assignedProjectId = this.classControl.sessionId === sessionId
-                        && this.classControl.projectId
-                        && this.classControl.projectId !== 'all'
-                        ? this.classControl.projectId
-                        : projectId;
-                    const selectedProject = session.projects.find(project => project.id === assignedProjectId)
+                    const selectedProject = session.projects.find(project => project.id === (this.assignedProjectId(sessionId) || projectId))
                         || session.projects.find(project => project.id === this.currentProject)
                         || session.projects[0];
                     this.currentProject = selectedProject.id;
                     this.currentProjectData = selectedProject;
-                    projectSelector.value = selectedProject.id;
-                    projectSelector.disabled = Boolean(
-                        this.classControl.sessionId === sessionId
-                        && this.classControl.projectId
-                        && this.classControl.projectId !== 'all'
-                    );
                     missions = selectedProject.missions;
                     baseHTML = selectedProject.baseHTML;
-                    document.getElementById('project-description').textContent = selectedProject.description;
-                    document.getElementById('project-description').classList.remove('hidden');
-                    document.getElementById('sidebar-title').textContent = session.title;
                 } else {
-                    projectSelectorWrapper.classList.add('hidden');
-                    projectSelector.disabled = false;
-                    document.getElementById('project-description').classList.add('hidden');
                     this.currentProject = '';
-                    document.getElementById('sidebar-title').textContent = session.title;
                 }
+                document.getElementById('sidebar-title').textContent = session.title;
 
                 let storedSessionProgress = this.progress[session.id] || {};
                 if (hasProjects) {
@@ -215,30 +233,276 @@ import { avatarStyles, createAvatarCharacter, createAvatarSeed, createAvatarValu
                     Boolean(storedProjectProgress[mission.id])
                 ]));
                 this.currentMissions = missions;
+                this.hintsShown = {};
                 document.getElementById('session-selector').value = session.id;
                 document.getElementById('editor-project-hint').textContent = this.currentProjectData
-                    ? `Proyecto: ${this.currentProjectData.title.replace(/^\d+\.\s*/, '')}`
-                    : `Práctica: ${session.title}`;
+                    ? `Subsesión ${this.subsessionNumber(this.currentProjectData)} · ${this.currentProjectData.title}`
+                    : session.title;
 
-                const container = document.getElementById('missions-container');
-                container.innerHTML = missions.map((mission, index) => `
-                    <div class="mission-item bg-slate-800 rounded" id="mission-ui-${mission.id}">
-                        <div class="font-bold text-white text-sm flex items-center mb-1">
-                            <span class="w-6 h-6 rounded-full bg-slate-700 flex items-center justify-center mr-2 text-xs" id="icon-${mission.id}"><i class="fa-solid fa-lock"></i></span>
-                            ${index + 1}. ${mission.title}
-                        </div>
-                        <p class="text-xs text-slate-400 ml-8">${mission.desc}</p>
-                    </div>
-                `).join('');
-                document.getElementById('success-banner').classList.add('hidden');
-                this.editor.setValue(baseHTML);
-                this.updateIframe(baseHTML);
-                missions.forEach(mission => {
-                    if (this.state[mission.id]) this.markMissionComplete(mission.id, false);
-                });
+                this.renderSessionBrief();
+                this.renderRoadmap();
+                this.renderSubsessionInfo();
+                this.renderMissions();
+                const code = this.storedCode() ?? baseHTML;
+                this.editor.setValue(code);
+                this.updateIframe(code);
                 this.updateRankUI();
             } finally {
                 this.loadingSession = false;
+            }
+        },
+
+        assignedProjectId(sessionId) {
+            return this.classControl.sessionId === sessionId
+                && this.classControl.projectId
+                && this.classControl.projectId !== 'all'
+                ? this.classControl.projectId
+                : '';
+        },
+
+        subsessionNumber(project) {
+            const session = this.currentSessionData;
+            const sessionNumber = session?.number
+                || SessionRegistry.catalog.findIndex(entry => entry.id === session?.id) + 1;
+            return `${sessionNumber}.${session.projects.indexOf(project) + 1}`;
+        },
+
+        completedInProject(project) {
+            const saved = project === this.currentProjectData
+                ? this.state
+                : this.progress[this.currentSession]?.[project.id] || {};
+            return project.missions.filter(mission => saved[mission.id]).length;
+        },
+
+        isProjectComplete(project) {
+            return project.missions.length > 0 && this.completedInProject(project) === project.missions.length;
+        },
+
+        codeKey(projectId) {
+            return `${CODE_STORAGE_PREFIX}:${this.studentId}:${this.currentSession}:${projectId || 'sesion-completa'}`;
+        },
+
+        storedCode() {
+            if (!this.studentId) return null;
+            const saved = readStoredCode(this.codeKey(this.currentProject));
+            if (saved !== null || !this.currentSessionData?.carryCode || !this.currentProjectData) return saved;
+            const projects = this.currentSessionData.projects;
+            for (let index = projects.indexOf(this.currentProjectData) - 1; index >= 0; index -= 1) {
+                const previous = readStoredCode(this.codeKey(projects[index].id));
+                if (previous !== null) return previous;
+            }
+            return null;
+        },
+
+        scheduleCodeSave(code) {
+            if (!this.studentId) return;
+            const key = this.codeKey(this.currentProject);
+            window.clearTimeout(this.codeSaveTimer);
+            this.pendingCodeSave = () => writeStoredCode(key, code);
+            this.codeSaveTimer = window.setTimeout(() => this.flushCodeSave(), 400);
+        },
+
+        flushCodeSave() {
+            window.clearTimeout(this.codeSaveTimer);
+            this.pendingCodeSave?.();
+            this.pendingCodeSave = null;
+        },
+
+        renderSessionBrief() {
+            const session = this.currentSessionData;
+            const hasBrief = Boolean(session?.purpose);
+            document.getElementById('session-brief').classList.toggle('hidden', !hasBrief);
+            document.getElementById('lobby-session-brief').classList.toggle('hidden', !hasBrief);
+            if (!hasBrief) return;
+            document.getElementById('session-purpose').textContent = `Hoy aprenderé a ${session.purpose}`;
+            document.getElementById('session-product').textContent = session.product || '';
+            fillTextList(document.getElementById('session-vocabulary'), session.vocabulary || []);
+            fillTextList(document.getElementById('session-criteria'), session.criteria || []);
+            document.getElementById('lobby-session-title').textContent = session.title;
+            document.getElementById('lobby-session-purpose').textContent = `Hoy aprenderemos a ${session.purpose}`;
+            document.getElementById('lobby-session-question').textContent = session.start || '';
+            document.getElementById('lobby-session-question-row').classList.toggle('hidden', !session.start);
+        },
+
+        renderRoadmap() {
+            const roadmap = document.getElementById('subsession-roadmap');
+            const projects = this.currentSessionData?.projects || [];
+            roadmap.replaceChildren();
+            roadmap.classList.toggle('hidden', projects.length === 0);
+            const assignedProjectId = this.assignedProjectId(this.currentSession);
+            projects.forEach(project => {
+                const isCurrent = project.id === this.currentProject;
+                const isDone = this.isProjectComplete(project);
+                const step = document.createElement('button');
+                step.type = 'button';
+                step.className = 'roadmap-step';
+                step.dataset.projectId = project.id;
+                step.classList.toggle('is-current', isCurrent);
+                step.classList.toggle('is-done', isDone);
+                step.classList.toggle('is-challenge', Boolean(project.challenge));
+                if (isCurrent) step.setAttribute('aria-current', 'step');
+                step.disabled = Boolean(assignedProjectId && assignedProjectId !== project.id);
+                if (step.disabled) step.title = 'El docente asignó otra subsesión para esta clase.';
+
+                const number = document.createElement('span');
+                number.className = 'roadmap-number';
+                number.textContent = this.subsessionNumber(project);
+                const text = document.createElement('span');
+                text.className = 'roadmap-text';
+                const title = document.createElement('strong');
+                title.textContent = project.title;
+                const detail = document.createElement('small');
+                detail.textContent = [
+                    project.challenge ? 'Reto' : '',
+                    `${this.completedInProject(project)}/${project.missions.length} misiones`,
+                    project.minutes ? `${project.minutes} min` : ''
+                ].filter(Boolean).join(' · ');
+                text.append(title, detail);
+                const state = document.createElement('span');
+                state.className = 'roadmap-state';
+                state.textContent = isDone ? 'Lograda' : isCurrent ? 'Ahora' : '';
+                step.append(number, text, state);
+                roadmap.appendChild(step);
+            });
+        },
+
+        renderSubsessionInfo() {
+            const project = this.currentProjectData;
+            document.getElementById('subsession-info').classList.toggle('hidden', !project);
+            if (!project) return;
+            document.getElementById('subsession-title').textContent =
+                `${this.subsessionNumber(project)} · ${project.title}`;
+            document.getElementById('subsession-description').textContent = project.description || '';
+            fillTextList(document.getElementById('subsession-learn'), project.learn || []);
+            document.getElementById('subsession-learn-row').classList.toggle('hidden', !project.learn?.length);
+        },
+
+        renderMissions() {
+            const container = document.getElementById('missions-container');
+            container.replaceChildren();
+            const currentMission = this.currentMissions.find(mission => !this.state[mission.id]);
+            this.currentMissions.forEach((mission, index) => {
+                const done = Boolean(this.state[mission.id]);
+                const isCurrent = mission === currentMission;
+                const item = document.createElement('details');
+                item.className = 'mission-item';
+                item.id = `mission-ui-${mission.id}`;
+                item.classList.toggle('completed', done);
+                item.classList.toggle('current', isCurrent);
+                item.open = isCurrent;
+
+                const summary = document.createElement('summary');
+                summary.className = 'mission-summary';
+                const marker = document.createElement('span');
+                marker.className = 'mission-marker';
+                if (done) marker.innerHTML = '<i class="fa-solid fa-check" aria-hidden="true"></i>';
+                else marker.textContent = String(index + 1);
+                const title = document.createElement('span');
+                title.className = 'mission-title';
+                title.textContent = done ? `${mission.title} (lograda)` : mission.title;
+                summary.append(marker, title);
+                if (isCurrent) {
+                    const badge = document.createElement('span');
+                    badge.className = 'mission-state';
+                    badge.textContent = 'Ahora';
+                    summary.appendChild(badge);
+                }
+
+                const body = document.createElement('div');
+                body.className = 'mission-body';
+                const desc = document.createElement('p');
+                desc.className = 'mission-desc';
+                desc.innerHTML = mission.desc;
+                body.appendChild(desc);
+                const hints = mission.hints || [];
+                if (hints.length && !done) {
+                    const list = document.createElement('ol');
+                    list.className = 'mission-hints';
+                    list.id = `hints-${mission.id}`;
+                    hints.slice(0, this.hintsShown[mission.id] || 0).forEach(hint => {
+                        const entry = document.createElement('li');
+                        entry.innerHTML = hint;
+                        list.appendChild(entry);
+                    });
+                    const hintButton = document.createElement('button');
+                    hintButton.type = 'button';
+                    hintButton.className = 'mission-hint-button';
+                    hintButton.dataset.missionId = mission.id;
+                    body.append(list, hintButton);
+                    this.updateHintButton(mission, hintButton);
+                }
+                item.append(summary, body);
+                container.appendChild(item);
+            });
+        },
+
+        updateHintButton(mission, button) {
+            const shown = this.hintsShown[mission.id] || 0;
+            const total = mission.hints.length;
+            button.hidden = shown >= total;
+            button.innerHTML = '<i class="fa-solid fa-lightbulb" aria-hidden="true"></i>';
+            button.append(` ${shown === 0 ? 'Necesito una pista' : `Ver otra pista (${shown + 1} de ${total})`}`);
+        },
+
+        showNextHint(missionId) {
+            const mission = this.currentMissions.find(item => item.id === missionId);
+            const list = document.getElementById(`hints-${missionId}`);
+            const shown = this.hintsShown[missionId] || 0;
+            if (!mission?.hints || !list || shown >= mission.hints.length) return;
+            this.hintsShown[missionId] = shown + 1;
+            const entry = document.createElement('li');
+            entry.innerHTML = mission.hints[shown];
+            list.appendChild(entry);
+            this.updateHintButton(mission, list.nextElementSibling);
+        },
+
+        nextProject() {
+            const projects = this.currentSessionData?.projects || [];
+            if (!this.currentProjectData || this.assignedProjectId(this.currentSession)) return null;
+            const currentIndex = projects.indexOf(this.currentProjectData);
+            return projects.slice(currentIndex + 1).find(project => !this.isProjectComplete(project))
+                || projects.slice(0, currentIndex).find(project => !this.isProjectComplete(project))
+                || null;
+        },
+
+        renderCompletion() {
+            const banner = document.getElementById('success-banner');
+            banner.replaceChildren();
+            const session = this.currentSessionData;
+            const title = document.createElement('p');
+            title.className = 'session-success-title';
+            title.textContent = this.currentProjectData
+                ? `¡Subsesión ${this.subsessionNumber(this.currentProjectData)} lograda! 🎉`
+                : '¡Sesión lograda! 🎉';
+            banner.appendChild(title);
+
+            const next = this.nextProject();
+            if (next) {
+                const nextButton = document.createElement('button');
+                nextButton.type = 'button';
+                nextButton.className = 'session-next-button';
+                nextButton.dataset.nextProjectId = next.id;
+                nextButton.textContent = `Seguir con ${this.subsessionNumber(next)} · ${next.title}`;
+                banner.appendChild(nextButton);
+            }
+
+            const coreProjects = (session?.projects || []).filter(project => !project.challenge);
+            const sessionDone = coreProjects.length
+                ? coreProjects.every(project => this.isProjectComplete(project))
+                : !this.currentProjectData;
+            if (sessionDone && session?.closing?.length) {
+                const closing = document.createElement('section');
+                closing.className = 'session-closing';
+                const heading = document.createElement('h3');
+                heading.textContent = 'Cierre de la sesión';
+                const intro = document.createElement('p');
+                intro.textContent = 'Antes de terminar, responde en tu cuaderno o conversa con tu grupo:';
+                const questions = document.createElement('ol');
+                fillTextList(questions, session.closing);
+                const download = document.createElement('p');
+                download.textContent = 'No olvides guardar tu trabajo con el botón «Descargar».';
+                closing.append(heading, intro, questions, download);
+                banner.appendChild(closing);
             }
         },
 
@@ -299,10 +563,10 @@ import { avatarStyles, createAvatarCharacter, createAvatarSeed, createAvatarValu
             lobby.classList.toggle('hidden', !waiting);
             document.getElementById('lobby-summary').textContent = waiting
                 ? 'Esperando al docente'
-                : 'La práctica está en marcha';
+                : 'La clase está en marcha';
             document.getElementById('lobby-waiting-message').textContent = waiting
-                ? 'Ya estás en la sala. Cuando el docente inicie la práctica, entrarás automáticamente al laboratorio.'
-                : 'La práctica ha comenzado. Tu sala de espera se cerró y el laboratorio está listo.';
+                ? 'Ya estás en la sala. Cuando el docente inicie la clase, entrarás automáticamente al laboratorio.'
+                : 'La clase ha comenzado. Tu sala de espera se cerró y el laboratorio está listo.';
             if (waiting) {
                 this.updateStudentAvatarInUI();
             }
@@ -370,6 +634,7 @@ import { avatarStyles, createAvatarCharacter, createAvatarSeed, createAvatarValu
             if (this.loadingSession || !this.studentId || !this.classControl.active) return;
             const code = this.editor.getValue();
             this.updateIframe(code);
+            this.scheduleCodeSave(code);
             this.validateMissions(code);
         },
 
@@ -457,22 +722,22 @@ import { avatarStyles, createAvatarCharacter, createAvatarSeed, createAvatarValu
                 missions.forEach(mission => {
                     if (!this.state[mission.id] && mission.validate(virtualDoc)) {
                         this.state[mission.id] = true;
-                        this.markMissionComplete(mission.id);
                         newlyCompletedMissions.push(mission.id);
                         changed = true;
                     }
                 });
                 if (changed) {
-                    const savedProgress = { ...(this.progress[this.currentSession] || {}) };
+                    let savedProgress = { ...(this.progress[this.currentSession] || {}) };
                     if (this.currentProjectData) {
-                        if (this.currentProject === 'primera-pagina') {
-                            ['m1', 'm2', 'm3', 'm4'].forEach(missionId => delete savedProgress[missionId]);
-                        }
+                        savedProgress = withoutLegacyMissionKeys(savedProgress);
                         savedProgress[this.currentProject] = { ...this.state };
                     } else {
                         Object.assign(savedProgress, this.state);
                     }
                     this.progress[this.currentSession] = savedProgress;
+                    this.celebrate();
+                    this.renderMissions();
+                    this.renderRoadmap();
                     this.updateRankUI();
                     saveStudentProgress(this.studentId, this.currentSession, this.progress[this.currentSession])
                         .catch(error => this.showError(error));
@@ -487,13 +752,8 @@ import { avatarStyles, createAvatarCharacter, createAvatarSeed, createAvatarValu
             }).catch(error => this.showError(error));
         },
 
-        markMissionComplete(missionId, celebrate = true) {
-            const element = document.getElementById(`mission-ui-${missionId}`);
-            if (!element) return;
-            element.classList.add('completed');
-            document.getElementById(`icon-${missionId}`).innerHTML = '<i class="fa-solid fa-check text-white"></i>';
-            document.getElementById(`icon-${missionId}`).classList.replace('bg-slate-700', 'bg-green-500');
-            if (celebrate && typeof confetti === 'function') {
+        celebrate() {
+            if (typeof confetti === 'function') {
                 confetti({ particleCount: 50, spread: 60, origin: { y: 0.8 } });
             }
         },
@@ -513,14 +773,16 @@ import { avatarStyles, createAvatarCharacter, createAvatarSeed, createAvatarValu
             document.getElementById('mission-progress-fill').style.width = `${progressPercent}%`;
             const nextMission = this.currentMissions.find(mission => !this.state[mission.id]);
             document.getElementById('next-mission-hint').textContent = nextMission
-                ? `Siguiente: ${nextMission.title}`
-                : '¡Completaste todas las misiones de esta actividad!';
+                ? `Ahora: ${nextMission.title}`
+                : '¡Completaste todas las misiones de esta subsesión!';
+            const banner = document.getElementById('success-banner');
+            banner.classList.toggle('hidden', percent < 1);
             if (percent === 0) badge.textContent = 'Rango: Novato 🥚';
             else if (percent < 0.5) badge.textContent = 'Rango: Aprendiz 🐥';
             else if (percent < 1) badge.textContent = 'Rango: Coder 💻';
             else {
                 badge.textContent = 'Rango: Leyenda 👑';
-                document.getElementById('success-banner').classList.remove('hidden');
+                this.renderCompletion();
             }
         },
 
@@ -551,30 +813,38 @@ import { avatarStyles, createAvatarCharacter, createAvatarSeed, createAvatarValu
 
         resetSession() {
             if (!this.studentId || !this.classControl.active) return;
+            const label = this.currentProjectData
+                ? `la subsesión ${this.subsessionNumber(this.currentProjectData)}`
+                : 'esta sesión';
+            if (!window.confirm(`¿Reiniciar ${label}? Se borrará tu código y tus misiones logradas.`)) return;
             const sessionId = this.currentSession;
             const projectId = this.currentProject;
-            const sessionProgress = { ...(this.progress[sessionId] || {}) };
+            let sessionProgress = { ...(this.progress[sessionId] || {}) };
             if (this.currentProjectData) {
-                if (this.currentProject === 'primera-pagina') {
-                    ['m1', 'm2', 'm3', 'm4'].forEach(missionId => delete sessionProgress[missionId]);
-                }
+                sessionProgress = withoutLegacyMissionKeys(sessionProgress);
                 sessionProgress[projectId] = {};
             } else {
                 Object.keys(this.state).forEach(missionId => delete sessionProgress[missionId]);
             }
             this.progress[sessionId] = sessionProgress;
+            this.pendingCodeSave = null;
+            writeStoredCode(
+                this.codeKey(projectId),
+                this.currentProjectData?.baseHTML ?? this.currentSessionData?.baseHTML ?? ''
+            );
             this.loadSession(sessionId, projectId).then(() => {
                 return saveStudentProgress(this.studentId, sessionId, this.progress[sessionId]);
             }).catch(error => this.showError(error));
         },
 
         exportCode() {
-            const html = `<!DOCTYPE html>\n<html lang="es">\n<head>\n<meta charset="utf-8">\n<title>Mi Proyecto</title>\n${this.currentSession === 'sesion1' ? PREVIEW_STYLES : ''}</head>\n<body>\n${this.editor.getValue()}\n</body>\n</html>`;
+            const pageTitle = this.currentProjectData?.title || this.currentSessionData?.title || 'Mi página';
+            const html = `<!DOCTYPE html>\n<html lang="es">\n<head>\n<meta charset="utf-8">\n<title>${pageTitle}</title>\n${this.currentSession === 'sesion1' ? PREVIEW_STYLES : ''}</head>\n<body>\n${this.editor.getValue()}\n</body>\n</html>`;
             const blob = new Blob([html], { type: 'text/html' });
             const url = URL.createObjectURL(blob);
             const link = document.createElement('a');
             link.href = url;
-            link.download = `proyecto_${this.currentSession}${this.currentProject ? `_${this.currentProject}` : ''}.html`;
+            link.download = `mi-pagina_${this.currentSession}${this.currentProject ? `_${this.currentProject}` : ''}.html`;
             link.click();
             window.setTimeout(() => URL.revokeObjectURL(url), 1000);
         },
@@ -666,14 +936,18 @@ import { avatarStyles, createAvatarCharacter, createAvatarSeed, createAvatarValu
             if (!this.studentId) return;
             const sendButton = document.getElementById('send-help-button');
             const errorElement = document.getElementById('help-form-error');
-            const message = document.getElementById('help-message').value.trim() || 'Necesito ayuda con la práctica.';
+            const typedMessage = document.getElementById('help-message').value.trim() || 'Necesito ayuda.';
+            const context = this.helpContext();
+            const message = context
+                ? `${typedMessage.slice(0, 300 - context.length - 3)} (${context})`
+                : typedMessage.slice(0, 300);
             sendButton.disabled = true;
             sendButton.textContent = 'Enviando…';
             try {
                 await requestTeacherHelp(this.studentId, {
                     name: this.studentName,
                     avatar: this.studentAvatar,
-                    message: message.slice(0, 300)
+                    message
                 });
                 this.closeHelpDialog();
                 document.getElementById('help-response').textContent = 'Solicitud enviada. El docente te responderá aquí.';
@@ -685,6 +959,18 @@ import { avatarStyles, createAvatarCharacter, createAvatarSeed, createAvatarValu
                 sendButton.disabled = false;
                 sendButton.textContent = 'Enviar solicitud';
             }
+        },
+
+        // Le dice al docente dónde está el estudiante sin que tenga que explicarlo.
+        helpContext() {
+            const missionIndex = this.currentMissions.findIndex(mission => !this.state[mission.id]);
+            const parts = [
+                this.currentProjectData
+                    ? `Subsesión ${this.subsessionNumber(this.currentProjectData)}`
+                    : this.currentSessionData?.title,
+                missionIndex >= 0 ? `misión ${missionIndex + 1}: ${this.currentMissions[missionIndex].title}` : ''
+            ];
+            return parts.filter(Boolean).join(', ').slice(0, 120);
         },
 
         showError(error) {

@@ -16,28 +16,26 @@ import { createAvatarCharacter } from './avatar.js';
 import { progressFor } from './progress.js';
 import { serializeCsv } from './teacher-report.js';
 
-const sessionCatalog = [
-    {
-        id: 'sesion1',
-        title: 'Sesión 1: Proyectos con HTML',
-        projects: [
-            { id: 'primera-pagina', title: '1. Mi primera página', missions: 3 },
-            { id: 'portada', title: '2. Portada de película o libro', missions: 4 },
-            { id: 'tarea-escolar', title: '3. Mi tarea escolar', missions: 5 },
-            { id: 'cv', title: '4. Mi currículum', missions: 5 }
-        ]
-    },
-    {
-        id: 'sesion2',
-        title: 'Sesión 2: Diseño (CSS)',
-        projects: [
-            { id: 'colores', title: '1. Primeros colores', missions: 3 },
-            { id: 'tipografia', title: '2. Texto con personalidad', missions: 3 },
-            { id: 'tarjetas', title: '3. Tarjetas y espacios', missions: 5 },
-            { id: 'interaccion-responsive', title: '4. Interacción y diseño adaptable', missions: 4 }
-        ]
-    }
-];
+// El panel lee los mismos archivos de js/sesiones/ que el laboratorio, así que una
+// misión nueva aparece aquí sin copiar el catálogo a mano.
+async function loadSessionCatalog() {
+    const sessions = await Promise.all(
+        window.SessionRegistry.catalog.map(entry => window.SessionRegistry.load(entry.id))
+    );
+    return sessions.map(session => ({
+        id: session.id,
+        title: session.title,
+        missions: session.projects?.length ? 0 : (session.missions || []).length,
+        projects: (session.projects || []).map((project, index) => ({
+            id: project.id,
+            title: `${index + 1}. ${project.title}${project.challenge ? ' (reto)' : ''}`,
+            missions: project.missions.length,
+            missionTitles: Object.fromEntries(project.missions.map(mission => [mission.id, mission.title]))
+        }))
+    }));
+}
+
+const sessionCatalog = await loadSessionCatalog();
 let stopWatchingStudents;
 let stopWatchingHelp;
 let stopWatchingCompletions;
@@ -131,7 +129,8 @@ function renderMissionCompletions(events = currentMissionCompletions) {
         const session = sessionCatalog.find(entry => entry.id === event.session_id);
         const project = session?.projects.find(entry => entry.id === event.project_id);
         const description = document.createElement('span');
-        description.textContent = `${student?.name || 'Estudiante'} · ${project?.title.replace(/^\d+\.\s*/, '') || event.project_id} · Misión ${event.mission_id.replace(/^m/, '')}`;
+        const missionTitle = project?.missionTitles?.[event.mission_id];
+        description.textContent = `${student?.name || 'Estudiante'} · ${project?.title.replace(/^\d+\.\s*/, '') || event.project_id} · Misión ${event.mission_id.replace(/^m/, '')}${missionTitle ? `: ${missionTitle}` : ''}`;
         const time = document.createElement('time');
         const completedAt = new Date(event.completed_at);
         if (Number.isNaN(completedAt.getTime())) {
@@ -234,7 +233,7 @@ function renderStudents(students) {
         projectProgress.className = 'mt-1 text-xs text-purple-200';
         projectProgress.textContent = summary.projects.length
             ? summary.projects.map(item => `${item.project.title.replace(/^\d+\.\s*/, '')}: ${item.completed}/${item.total}`).join(' · ')
-            : 'Diseño (CSS)';
+            : 'Sesión completa';
         const progressTrack = document.createElement('div');
         progressTrack.className = 'teacher-progress-track';
         progressTrack.setAttribute('role', 'progressbar');
@@ -321,7 +320,7 @@ function renderHelpRequests(requests) {
         title.append(avatar, studentName);
         const message = document.createElement('p');
         message.className = 'my-2 text-slate-300';
-        message.textContent = request.message || 'Solicita apoyo con la práctica.';
+        message.textContent = request.message || 'Solicita apoyo con la clase.';
         card.append(title, message);
         if (request.teacherMessage) {
             const reply = document.createElement('p');
@@ -402,12 +401,12 @@ function subscribeToClass() {
         const selectedSession = sessionCatalog.find(session => session.id === control.sessionId);
         const selectedProject = selectedSession?.projects.find(project => project.id === control.projectId);
         document.getElementById('class-status').textContent = control.active
-            ? `Práctica en curso: ${selectedSession?.title || control.sessionId} · ${selectedProject?.title || 'todas las subsesiones'}`
-            : 'Práctica en pausa';
-        document.getElementById('start-class').textContent = control.active ? 'Pausar práctica' : 'Dar comienzo a la práctica';
+            ? `Clase en curso: ${selectedSession?.title || control.sessionId} · ${selectedProject?.title || 'todas las subsesiones'}`
+            : 'Clase en pausa';
+        document.getElementById('start-class').textContent = control.active ? 'Pausar la clase' : 'Iniciar la clase';
         classIsActive = Boolean(control.active);
         document.getElementById('teacher-project-help').textContent = classIsActive
-            ? 'La práctica está en curso. Paúsala para cambiar la sesión o la subsesión asignada.'
+            ? 'La clase está en curso. Paúsala para cambiar la sesión o la subsesión asignada.'
             : 'Elige una subsesión para trabajar solo en ella o habilita todas.';
         document.getElementById('teacher-session').value = control.sessionId || sessionCatalog[0].id;
         populateProjectSelector(control.sessionId || sessionCatalog[0].id, control.projectId || 'all');

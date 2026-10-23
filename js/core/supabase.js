@@ -163,7 +163,7 @@ export function watchClassControl(callback, onError) {
         .on('postgres_changes', { event: '*', schema: 'public', table: 'classroom_control' }, publish)
         .subscribe(status => {
             if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-                onError?.(new Error(`No se pudo escuchar el estado de la práctica: ${status}`));
+                onError?.(new Error(`No se pudo escuchar el estado de la clase: ${status}`));
             }
         });
     return () => {
@@ -311,7 +311,7 @@ export function watchHelpRequests(callback, onError) {
 
 export async function updateClassControl(control) {
     const user = await currentUser();
-    if (!isTeacher(user)) throw new Error('Solo el docente puede controlar la práctica.');
+    if (!isTeacher(user)) throw new Error('Solo el docente puede controlar la clase.');
     const { error } = await getSupabase().from('classroom_control').upsert({
         id: 1,
         active: Boolean(control.active),
