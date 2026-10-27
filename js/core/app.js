@@ -80,6 +80,7 @@ import { avatarStyles, createAvatarCharacter, createAvatarSeed, createAvatarValu
         state: {},
         currentMissions: [],
         loadingSession: false,
+        observingExample: false,
 
         init() {
             this.editor = LabEditor.create(
@@ -161,7 +162,7 @@ import { avatarStyles, createAvatarCharacter, createAvatarSeed, createAvatarValu
                 document.getElementById('practice-status').className = control.active
                     ? 'bg-green-600/20 text-green-300 px-4 py-2 text-center'
                     : 'bg-amber-600/20 text-amber-200 px-4 py-2 text-center';
-                this.editor.setOption('readOnly', !this.studentId || !control.active);
+                this.editor.setOption('readOnly', !this.studentId || !control.active || this.observingExample);
                 document.getElementById('reset-button').disabled = !this.studentId || !control.active;
                 const lockHint = document.getElementById('editor-lock-hint');
                 lockHint.classList.toggle('hidden', Boolean(this.studentId && control.active));
@@ -243,13 +244,35 @@ import { avatarStyles, createAvatarCharacter, createAvatarSeed, createAvatarValu
                 this.renderRoadmap();
                 this.renderSubsessionInfo();
                 this.renderMissions();
-                const code = this.storedCode() ?? baseHTML;
+                const savedCode = this.storedCode();
+                const code = savedCode ?? baseHTML;
+                this.observingExample = Boolean(this.currentProjectData?.exampleHTML && savedCode === null);
+                this.renderExample();
                 this.editor.setValue(code);
                 this.updateIframe(code);
                 this.updateRankUI();
             } finally {
                 this.loadingSession = false;
             }
+        },
+
+        renderExample() {
+            const panel = document.getElementById('worked-example');
+            panel.hidden = !this.observingExample;
+            const code = this.observingExample ? this.currentProjectData.exampleHTML : '';
+            document.getElementById('example-code').textContent = code;
+            document.getElementById('example-preview').srcdoc = code;
+            this.editor.setOption('readOnly', !this.studentId || !this.classControl.active || this.observingExample);
+        },
+
+        startPractice() {
+            if (!this.studentId || !this.classControl.active || !this.observingExample) return;
+            this.observingExample = false;
+            this.renderExample();
+            // El modelo nunca entra en el editor ni en los validadores.
+            this.scheduleCodeSave(this.editor.getValue());
+            this.flushCodeSave();
+            this.editor.focus();
         },
 
         assignedProjectId(sessionId) {
@@ -318,6 +341,12 @@ import { avatarStyles, createAvatarCharacter, createAvatarSeed, createAvatarValu
             document.getElementById('session-product').textContent = session.product || '';
             fillTextList(document.getElementById('session-vocabulary'), session.vocabulary || []);
             fillTextList(document.getElementById('session-criteria'), session.criteria || []);
+            fillTextList(document.getElementById('session-challenge-criteria'), session.challengeCriteria || []);
+            document.getElementById('session-challenge-row').classList.toggle('hidden', !session.challengeCriteria?.length);
+            document.getElementById('session-competency').textContent = session.competency
+                ? `${session.competency.name} Capacidad: ${session.competency.capacity}`
+                : '';
+            document.getElementById('session-competency-row').classList.toggle('hidden', !session.competency);
             document.getElementById('lobby-session-title').textContent = session.title;
             document.getElementById('lobby-session-purpose').textContent = `Hoy aprenderemos a ${session.purpose}`;
             document.getElementById('lobby-session-question').textContent = session.start || '';
@@ -369,12 +398,18 @@ import { avatarStyles, createAvatarCharacter, createAvatarSeed, createAvatarValu
         renderSubsessionInfo() {
             const project = this.currentProjectData;
             document.getElementById('subsession-info').classList.toggle('hidden', !project);
+            const understanding = document.getElementById('understanding-panel');
+            understanding.hidden = !project?.understanding?.length;
+            understanding.open = false;
+            fillTextList(document.getElementById('understanding-tasks'), (project?.understanding || []).map((task, index) => `${['Explica', 'Corrige', 'Prueba una variante'][index]}: ${task}`));
             if (!project) return;
             document.getElementById('subsession-title').textContent =
                 `${this.subsessionNumber(project)} · ${project.title}`;
             document.getElementById('subsession-description').textContent = project.description || '';
             fillTextList(document.getElementById('subsession-learn'), project.learn || []);
             document.getElementById('subsession-learn-row').classList.toggle('hidden', !project.learn?.length);
+            document.getElementById('subsession-idea').innerHTML = project.idea || '';
+            document.getElementById('subsession-idea-row').classList.toggle('hidden', !project.idea);
         },
 
         renderMissions() {
@@ -414,16 +449,13 @@ import { avatarStyles, createAvatarCharacter, createAvatarSeed, createAvatarValu
                 desc.className = 'mission-desc';
                 desc.innerHTML = mission.desc;
                 body.appendChild(desc);
-                const hints = mission.hints || [];
-                if (hints.length && !done) {
+                if (this.hintSteps(mission) && !done) {
                     const list = document.createElement('ol');
                     list.className = 'mission-hints';
                     list.id = `hints-${mission.id}`;
-                    hints.slice(0, this.hintsShown[mission.id] || 0).forEach(hint => {
-                        const entry = document.createElement('li');
-                        entry.innerHTML = hint;
-                        list.appendChild(entry);
-                    });
+                    for (let step = 0; step < (this.hintsShown[mission.id] || 0); step += 1) {
+                        list.appendChild(this.hintItem(mission, step));
+                    }
                     const hintButton = document.createElement('button');
                     hintButton.type = 'button';
                     hintButton.className = 'mission-hint-button';
@@ -436,23 +468,75 @@ import { avatarStyles, createAvatarCharacter, createAvatarSeed, createAvatarValu
             });
         },
 
+        // Una misión puede tener su propio video; si no, usa el de su subsesión.
+        missionVideo(mission) {
+            return mission.video || this.currentProjectData?.video || null;
+        },
+
+        // Las pistas escritas van primero y el video, si existe, es la última pista.
+        hintSteps(mission) {
+            return (mission.hints?.length || 0) + (this.missionVideo(mission) ? 1 : 0);
+        },
+
+        hintItem(mission, step) {
+            const hints = mission.hints || [];
+            if (step >= hints.length) return this.videoHint(this.missionVideo(mission));
+            const entry = document.createElement('li');
+            entry.innerHTML = hints[step];
+            return entry;
+        },
+
+        videoHint(video) {
+            const entry = document.createElement('li');
+            entry.className = 'mission-video';
+            const title = document.createElement('p');
+            title.className = 'mission-video-title';
+            title.innerHTML = '<i class="fa-solid fa-film" aria-hidden="true"></i>';
+            title.append(` Mira el video: ${video.title}${video.note ? ` (${video.note})` : ''}`);
+            const params = new URLSearchParams();
+            if (video.start) params.set('start', String(video.start));
+            if (video.end) params.set('end', String(video.end));
+            const query = params.toString();
+            const player = document.createElement('iframe');
+            player.src = `https://www.youtube-nocookie.com/embed/${video.youtubeId}${query ? `?${query}` : ''}`;
+            player.title = `Video de refuerzo: ${video.title}`;
+            player.loading = 'lazy';
+            player.referrerPolicy = 'strict-origin-when-cross-origin';
+            player.allow = 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture';
+            player.allowFullscreen = true;
+            const help = document.createElement('p');
+            help.className = 'mission-video-help';
+            help.textContent = window.location.protocol === 'file:'
+                ? 'El video no se reproduce si abres el laboratorio como archivo. Ábrelo en YouTube o pide ayuda a tu docente.'
+                : 'Si el video no carga, ábrelo en YouTube o pide ayuda a tu docente.';
+            const link = document.createElement('a');
+            link.href = `https://www.youtube.com/watch?v=${video.youtubeId}${video.start ? `&t=${video.start}s` : ''}`;
+            link.target = '_blank';
+            link.rel = 'noopener noreferrer';
+            link.textContent = 'Abrir el video en YouTube';
+            entry.append(title, player, help, link);
+            return entry;
+        },
+
         updateHintButton(mission, button) {
             const shown = this.hintsShown[mission.id] || 0;
-            const total = mission.hints.length;
+            const total = this.hintSteps(mission);
+            const nextIsVideo = shown === (mission.hints?.length || 0) && Boolean(this.missionVideo(mission));
             button.hidden = shown >= total;
-            button.innerHTML = '<i class="fa-solid fa-lightbulb" aria-hidden="true"></i>';
-            button.append(` ${shown === 0 ? 'Necesito una pista' : `Ver otra pista (${shown + 1} de ${total})`}`);
+            button.innerHTML = `<i class="fa-solid ${nextIsVideo ? 'fa-film' : 'fa-lightbulb'}" aria-hidden="true"></i>`;
+            const label = shown === 0
+                ? 'Necesito una pista'
+                : nextIsVideo ? 'Mira el video' : `Ver otra pista (${shown + 1} de ${total})`;
+            button.append(` ${label}`);
         },
 
         showNextHint(missionId) {
             const mission = this.currentMissions.find(item => item.id === missionId);
             const list = document.getElementById(`hints-${missionId}`);
             const shown = this.hintsShown[missionId] || 0;
-            if (!mission?.hints || !list || shown >= mission.hints.length) return;
+            if (!mission || !list || shown >= this.hintSteps(mission)) return;
             this.hintsShown[missionId] = shown + 1;
-            const entry = document.createElement('li');
-            entry.innerHTML = mission.hints[shown];
-            list.appendChild(entry);
+            list.appendChild(this.hintItem(mission, shown));
             this.updateHintButton(mission, list.nextElementSibling);
         },
 
@@ -472,9 +556,13 @@ import { avatarStyles, createAvatarCharacter, createAvatarSeed, createAvatarValu
             const title = document.createElement('p');
             title.className = 'session-success-title';
             title.textContent = this.currentProjectData
-                ? `¡Subsesión ${this.subsessionNumber(this.currentProjectData)} lograda! 🎉`
+                ? `¡Completaste las comprobaciones de la subsesión ${this.subsessionNumber(this.currentProjectData)}! 🎉`
                 : '¡Sesión lograda! 🎉';
             banner.appendChild(title);
+            const reminder = document.createElement('p');
+            reminder.textContent = 'Ahora abre «Demuestra lo que aprendiste»: explica, corrige y prueba una variante. Tu docente revisará contigo estas evidencias antes de dar por logrado el aprendizaje.';
+            banner.appendChild(reminder);
+            document.getElementById('understanding-panel').open = true;
 
             const next = this.nextProject();
             if (next) {
@@ -631,7 +719,7 @@ import { avatarStyles, createAvatarCharacter, createAvatarSeed, createAvatarValu
         },
 
         handleCodeChange() {
-            if (this.loadingSession || !this.studentId || !this.classControl.active) return;
+            if (this.loadingSession || this.observingExample || !this.studentId || !this.classControl.active) return;
             const code = this.editor.getValue();
             this.updateIframe(code);
             this.scheduleCodeSave(code);
@@ -832,6 +920,9 @@ import { avatarStyles, createAvatarCharacter, createAvatarSeed, createAvatarValu
                 this.codeKey(projectId),
                 this.currentProjectData?.baseHTML ?? this.currentSessionData?.baseHTML ?? ''
             );
+            if (this.currentProjectData?.exampleHTML) {
+                try { window.localStorage.removeItem(this.codeKey(projectId)); } catch (error) { console.warn(error); }
+            }
             this.loadSession(sessionId, projectId).then(() => {
                 return saveStudentProgress(this.studentId, sessionId, this.progress[sessionId]);
             }).catch(error => this.showError(error));
@@ -888,7 +979,7 @@ import { avatarStyles, createAvatarCharacter, createAvatarSeed, createAvatarValu
             this.updateStudentAvatarInUI();
             this.setWaitingRoom(!this.classControl.active);
             document.getElementById('editor-lock-hint').classList.toggle('hidden', Boolean(this.classControl.active));
-            this.editor.setOption('readOnly', !this.classControl.active);
+            this.editor.setOption('readOnly', !this.classControl.active || this.observingExample);
             document.getElementById('reset-button').disabled = !this.classControl.active;
             document.getElementById('help-button').disabled = false;
             document.getElementById('lobby-help-button').disabled = false;

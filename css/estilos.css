@@ -380,6 +380,10 @@ body.student-lab .roadmap-step:disabled { cursor: not-allowed; opacity: .55; }
 body.student-lab .subsession-info h3 { color: #202d55; font-size: 15px; font-weight: 800; }
 body.student-lab .subsession-info p { margin-top: 2px; color: #52627f; font-size: 13px; line-height: 1.45; }
 body.student-lab .subsession-learn { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 8px; color: #52627f; font-size: 12px; font-weight: 700; }
+body.student-lab .subsession-idea { margin-top: 10px; padding: 10px 12px; border-left: 3px solid #5b55e7; border-radius: 8px; background: #f7f6ff; }
+body.student-lab .subsession-info .subsession-idea p { margin-top: 0; color: #29395f; }
+body.student-lab .subsession-info .subsession-idea .subsession-idea-label { margin-bottom: 4px; color: #514bd2; font-size: 11px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+body.student-lab .subsession-idea code { padding: 1px 4px; border-radius: 4px; background: #e9e7ff; color: #4338ca; font-family: Consolas, monospace; font-size: 12px; }
 
 body.student-lab .missions-list { display: grid; gap: 8px; }
 body.student-lab .mission-item { padding: 0; border-radius: 12px; }
@@ -400,6 +404,11 @@ body.student-lab .mission-body code,
 body.student-lab .quick-help code { padding: 1px 4px; border-radius: 4px; background: #edf2ff; color: #4338ca; font-family: Consolas, monospace; font-size: 12px; }
 body.student-lab .mission-hint-button { margin-top: 8px; padding: 6px 10px; border: 1px solid #f4dfa2; border-radius: 999px; background: #fff8e6; color: #79540b; font-size: 12px; font-weight: 700; }
 body.student-lab .mission-hint-button[hidden] { display: none; }
+body.student-lab .mission-hints li.mission-video { display: grid; gap: 6px; border-left-color: #5b55e7; background: #f7f6ff; color: #29395f; }
+body.student-lab .mission-video-title { font-weight: 700; }
+body.student-lab .mission-video iframe { width: 100%; aspect-ratio: 16 / 9; border: 0; border-radius: 8px; background: #111827; }
+body.student-lab .mission-video-help { color: #52627f; font-size: 12px; }
+body.student-lab .mission-video a { width: fit-content; color: #4338ca; font-weight: 700; text-decoration: underline; }
 
 body.student-lab .session-success { display: grid; gap: 10px; padding: 14px; border: 1px solid #a7e6d3; border-radius: 12px; background: #e9fbf4; color: #087e69; font-size: 13px; }
 body.student-lab .session-success-title { font-size: 15px; font-weight: 800; text-align: center; }
@@ -804,3 +813,7 @@ body.teacher-page #teacher-dashboard > .student-card > div:last-of-type > button
     body.teacher-page #teacher-dashboard > .student-card > div:last-of-type > select,
     body.teacher-page #teacher-dashboard > .student-card > div:last-of-type > button { flex-basis: 100%; }
 }
+
+/* El modelo puede desplazarse en pantallas pequeñas sin ocultar su botón. */
+#worked-example { flex: 0 1 auto; min-height: 0; overflow: auto; }
+#worked-example[hidden] { display: none; }

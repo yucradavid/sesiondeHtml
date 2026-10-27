@@ -1,6 +1,6 @@
 # Mejoras de las sesiones
 
-Este documento explica qué cambió en las sesiones de Academia Web para que se usen mejor en el colegio, y cómo escribir sesiones nuevas.
+Este documento explica qué cambió en las sesiones de Academia Web para que se usen mejor en el colegio, y cómo escribir sesiones nuevas. El contenido completo de cada sesión, subsesión y misión está en [SESIONES.md](SESIONES.md), y la guía docente (videos, errores frecuentes, listas de cotejo y checklist) en [sesiones_mejoradas.md](sesiones_mejoradas.md).
 
 ## Resumen
 
@@ -21,7 +21,8 @@ Las palabras «proyecto», «actividad» y «práctica» ya no aparecen en el la
 3. **Ve el propósito de la clase.** Arriba del panel aparece «Hoy aprenderé a…» y, al desplegarla, la ficha de la sesión: producto final, palabras nuevas y criterios de logro.
 4. **Mapa de subsesiones.** El menú desplegable se reemplazó por una lista con número (1.1, 1.2…), estado (Lograda / Ahora), misiones logradas y tiempo sugerido. Los retos opcionales están marcados como «Reto».
 5. **Una misión a la vez.** La misión actual se abre sola y lleva la etiqueta «Ahora». Las demás muestran su número en lugar de un candado, porque se pueden hacer en cualquier orden.
-6. **Pistas antes que ayuda.** Cada misión tiene el botón «Necesito una pista»: la primera pista explica la idea y la segunda muestra un ejemplo de código.
+6. **Pistas antes que ayuda.** Cada misión tiene el botón «Necesito una pista»: la primera pista explica la idea, la segunda muestra un ejemplo de código y la tercera es un video corto de YouTube (en todas las subsesiones menos la 2.2, que todavía no tiene video).
+   Cada subsesión muestra además una **idea clave** arriba de las misiones, con un ejemplo de la vida diaria.
 7. **Cierre de la sesión.** Al lograr una subsesión aparece «Seguir con 1.3 · …». Cuando termina todas las subsesiones principales, ve las preguntas de cierre y el recordatorio de descargar su página.
 8. **Inicio en la sala de espera.** Mientras espera al docente, el estudiante ve qué aprenderá hoy y una pregunta para pensar.
 9. **Ayuda con contexto.** Al pedir ayuda, el mensaje incluye automáticamente la subsesión y la misión en la que está.
@@ -45,9 +46,9 @@ Las palabras «proyecto», «actividad» y «práctica» ya no aparecen en el la
 | 1.1 ¡Hola, soy yo! · 15 min | `<h1>` `<p>` `<h2>` | Nombre como título · Presentación en un párrafo · Sección «Mis gustos» con subtítulo y párrafo |
 | 1.2 Mi libro o película favorita · 20 min | `<img>` `src` `alt` | Título · Resumen · Imagen con su descripción · Créditos |
 | 1.3 Mi tarea del colegio · 20 min | `<ul>` `<li>` `<a href>` | Tema · Introducción · Lista de tres ideas · Fuente con enlace · Conclusión |
-| 1.4 Reto: Mi perfil de estudiante · 15 min | `<header>` `<section>` `<footer>` | Nombre y colegio · Sobre mí · Lo que hago bien · Un proyecto del colegio · Contacto de práctica |
+| 1.4 Reto: Mi perfil de estudiante · 15 min | `<header>` `<section>` `<footer>` | Arma el encabezado · Sección «Sobre mí» · Sección «Lo que hago bien» · Una sección nueva desde cero · Arma el pie de página |
 
-«Mi currículum» pasó a llamarse «Mi perfil de estudiante» y habla de grado, colegio y proyectos escolares. Su id interno sigue siendo `cv`.
+«Mi currículum» pasó a llamarse «Mi perfil de estudiante». En el reto, el contenido viene escrito pero sin ordenar: el estudiante **construye** el `<header>`, los `<section>` y el `<footer>`. Su id interno sigue siendo `cv`.
 
 ### Sesión 2 · Le doy estilo a mi página (CSS)
 
@@ -58,7 +59,7 @@ Las palabras «proyecto», «actividad» y «práctica» ya no aparecen en el la
 | 2.1 Pinta tu página · 15 min | `color` `background-color` | Color del título · Color de los párrafos · Fondo de la página |
 | 2.2 Letras con personalidad · 15 min | `font-family` `font-size` `line-height` `text-align` | Letra · Tamaño · Espacio entre líneas · **Centrar el título (nueva)** |
 | 2.3 Cajas y espacios · 20 min | `border` `border-radius` `padding` `margin` `box-shadow` | Borde · Esquinas · Espacio por dentro · Espacio por fuera · Sombra |
-| 2.4 Reto: Botones vivos y celular · 20 min | `button` `:hover` `@media` `:focus-visible` | Botón · Enlace al pasar el cursor · Tarjeta en el celular · Foco del teclado |
+| 2.4 Reto: Botones vivos y celular · 20 min | `:hover` `@media` `:focus-visible` | Botón · Enlace o botón al pasar el cursor · Tarjeta en el celular · Foco del teclado |
 
 ## Validaciones corregidas
 
@@ -96,6 +97,11 @@ Cada sesión es un archivo en `js/sesiones/` con esta forma:
         product: 'Tu horario de clases como página web.',
         vocabulary: ['tabla', 'fila', 'celda', 'encabezado'],
         criteria: ['Uso <table> con filas y celdas.', 'Pongo encabezados con <th>.'],
+        challengeCriteria: ['Criterio que solo aplica a quien hace el reto.'], // opcional
+        competency: {
+            name: 'Se desenvuelve en entornos virtuales generados por las TIC (CNEB, competencia transversal).',
+            capacity: 'Crea objetos virtuales en diversos formatos.'
+        },
         start: '¿Dónde has visto información ordenada en filas y columnas?',
         closing: ['¿Cuándo conviene usar una tabla?', '¿Qué fue lo más difícil hoy?'],
         carryCode: false, // true = cada subsesión parte del código de la anterior
@@ -107,6 +113,8 @@ Cada sesión es un archivo en `js/sesiones/` con esta forma:
                 minutes: 20,
                 learn: ['<table>', '<tr>', '<td>'],
                 challenge: false,          // true = aparece como «Reto»
+                idea: 'Una tabla es como una cuadrícula: <code>&lt;tr&gt;</code> es una fila y <code>&lt;td&gt;</code> una celda.',
+                video: { title: 'Título del video', youtubeId: 'xxxxxxxxxxx' }, // opcional: pista 3
                 baseHTML: '<table>\n  <tr><td>Lunes</td></tr>\n</table>\n',
                 missions: [
                     {
@@ -129,7 +137,7 @@ Cada sesión es un archivo en `js/sesiones/` con esta forma:
 Para activarla:
 
 1. Agrega la sesión al `catalog` de `js/sesiones/index.js`: `{ id: 'sesion3', title: 'Sesión 3: Organizo información', src: 'js/sesiones/sesion3.js' }`.
-2. Corre `npm test`: la prueba revisa que cada misión tenga título, instrucción, dos pistas y validación, y que estén numeradas en orden.
+2. Corre `npm test`: la prueba revisa que cada misión tenga título, instrucción, dos pistas y validación, que estén numeradas en orden, que cada subsesión tenga idea clave y que cada video tenga un identificador de YouTube válido.
 3. No hace falta tocar el panel docente ni el SQL.
 
 Recomendaciones para escribir misiones:

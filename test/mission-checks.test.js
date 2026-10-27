@@ -13,8 +13,8 @@ function loadSessionScripts(...files) {
     return context;
 }
 
-function styleDoc(css) {
-    return { querySelectorAll: selector => (selector === 'style' ? [{ textContent: css }] : []) };
+function styleDoc(css, hasCard = true) {
+    return { querySelector: selector => selector === '.tarjeta' && hasCard ? {} : null, querySelectorAll: selector => (selector === 'style' ? [{ textContent: css }] : []) };
 }
 
 const { MissionChecks, SessionRegistry } = loadSessionScripts(
@@ -62,6 +62,11 @@ test('every mission has a title, an instruction, two hints and a validator', asy
         assert.ok(session.purpose && session.closing.length, `${id} necesita propósito y cierre`);
         session.projects.forEach(project => {
             assert.ok(project.learn.length && project.minutes, `${project.id} necesita «aprenderás» y tiempo`);
+            assert.ok(project.idea, `${project.id} necesita una idea clave`);
+            [project.video, ...project.missions.map(mission => mission.video)].filter(Boolean).forEach(video => {
+                assert.match(video.youtubeId, /^[\w-]{11}$/, `${project.id} tiene un video con id inválido`);
+                assert.ok(video.title, `${project.id} tiene un video sin título`);
+            });
             project.missions.forEach((mission, index) => {
                 assert.equal(mission.id, `m${index + 1}`, `${project.id} debe numerar sus misiones en orden`);
                 assert.ok(mission.title && mission.desc, `${project.id}/${mission.id} necesita texto`);
@@ -85,10 +90,47 @@ test('CSS missions fail on the starter and pass with a complete solution', async
         @media (max-width: 600px) { .tarjeta { margin: 8px; } }
     `;
     session.projects.forEach(project => {
-        const starter = styleDoc(project.baseHTML.match(/<style>([\s\S]*)<\/style>/)[1]);
+        const starter = styleDoc(project.baseHTML.match(/<style>([\s\S]*)<\/style>/)?.[1] || '');
         project.missions.forEach(mission => {
             assert.equal(mission.validate(starter), false, `${project.id}/${mission.id} no debe cumplirse al inicio`);
             assert.equal(mission.validate(styleDoc(solution)), true, `${project.id}/${mission.id} debe aceptar la solución`);
         });
     });
+});
+
+test('the hover challenge accepts the link or the button', async () => {
+    const session = await SessionRegistry.load('sesion2');
+    const hoverMission = session.projects.find(project => project.id === 'interaccion-responsive').missions[1];
+    assert.equal(hoverMission.validate(styleDoc('button:hover { background-color: #047857; }')), true);
+    assert.equal(hoverMission.validate(styleDoc('a:hover { color: crimson; }')), true);
+    assert.equal(hoverMission.validate(styleDoc('a :hover { color: crimson; }')), false);
+});
+
+
+test('HTML practice starts empty and has a separate complete model', async () => {
+    const session = await SessionRegistry.load('sesion1');
+    for (const project of session.projects) {
+        assert.equal(project.baseHTML, '');
+        assert.match(project.exampleHTML, /<h1>/);
+        assert.match(project.exampleHTML, /<p>/);
+    }
+});
+
+test('a CSS class rule needs its HTML connection', async () => {
+    const session = await SessionRegistry.load('sesion2');
+    const mission = session.projects.find(p => p.id === 'tarjetas').missions[0];
+    assert.equal(mission.validate(styleDoc('.tarjeta { border: 2px solid blue; }', false)), false);
+    assert.equal(mission.validate(styleDoc('.tarjeta { border: 2px solid blue; }', true)), true);
+    assert.doesNotMatch(session.baseHTML, /class="tarjeta"/);
+});
+
+
+test('each subsession includes explanation, debugging and transfer prompts', async () => {
+    for (const entry of SessionRegistry.catalog) {
+        const session = await SessionRegistry.load(entry.id);
+        for (const project of session.projects) {
+            assert.equal(project.understanding.length, 3, project.id);
+            assert.ok(project.understanding.every(prompt => typeof prompt === 'string' && prompt.trim().length > 20));
+        }
+    }
 });

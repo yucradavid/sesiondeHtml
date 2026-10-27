@@ -93,6 +93,14 @@
                 Escribe <code>!</code> + <kbd>Tab</kbd> para crear una página HTML completa.
                 <span>También puedes escribir una etiqueta y el editor la cerrará al pulsar <code>&gt;</code>.</span>
             </details>
+            <section id="worked-example" class="editor-help" hidden aria-label="Ejemplo antes de practicar">
+                <h3>1. Observa el ejemplo completo</h3>
+                <p>Relaciona cada etiqueta con el resultado. Explica qué abre, qué contiene y dónde cierra. Después construirás tu propia página desde cero.</p>
+                <pre id="example-code" style="white-space:pre-wrap;max-height:220px;overflow:auto"></pre>
+                <iframe id="example-preview" title="Resultado del ejemplo" sandbox="" style="width:100%;height:180px;background:white;border:0"></iframe>
+                <button type="button" onclick="SystemApp.startPractice()" class="session-next-button">2. Ocultar ejemplo y empezar desde cero</button>
+                <p>El modelo desaparece al comenzar. Las misiones y sus pistas seguirán disponibles. Observar no suma avances.</p>
+            </section>
             <textarea id="code-editor"></textarea>
         </section>
         <div class="resizer" id="drag-me" role="separator" aria-orientation="vertical" aria-label="Redimensionar editor y vista previa" aria-valuemin="25" aria-valuemax="75" aria-valuenow="55" tabindex="0"></div>
@@ -120,12 +128,26 @@
                         <details class="session-brief-details">
                             <summary>Ver la ficha de la sesión</summary>
                             <dl>
-                                <dt>Producto final</dt>
-                                <dd id="session-product"></dd>
-                                <dt>Palabras nuevas</dt>
-                                <dd><ul id="session-vocabulary" class="chip-list"></ul></dd>
-                                <dt>Lo lograré cuando…</dt>
-                                <dd><ul id="session-criteria" class="criteria-list"></ul></dd>
+                                <div id="session-competency-row" class="hidden">
+                                    <dt>Competencia</dt>
+                                    <dd id="session-competency"></dd>
+                                </div>
+                                <div>
+                                    <dt>Producto final</dt>
+                                    <dd id="session-product"></dd>
+                                </div>
+                                <div>
+                                    <dt>Palabras nuevas</dt>
+                                    <dd><ul id="session-vocabulary" class="chip-list"></ul></dd>
+                                </div>
+                                <div>
+                                    <dt>Lo lograré cuando…</dt>
+                                    <dd><ul id="session-criteria" class="criteria-list"></ul></dd>
+                                </div>
+                                <div id="session-challenge-row" class="hidden">
+                                    <dt>Si hago el reto, además…</dt>
+                                    <dd><ul id="session-challenge-criteria" class="criteria-list"></ul></dd>
+                                </div>
                             </dl>
                         </details>
                     </section>
@@ -136,6 +158,10 @@
                         <div id="subsession-learn-row" class="subsession-learn">
                             <span>Aprenderás:</span>
                             <ul id="subsession-learn" class="chip-list chip-list--code"></ul>
+                        </div>
+                        <div id="subsession-idea-row" class="subsession-idea hidden">
+                            <p class="subsession-idea-label"><i class="fa-solid fa-lightbulb" aria-hidden="true"></i> Idea clave</p>
+                            <p id="subsession-idea"></p>
                         </div>
                     </section>
                     <section class="mission-progress" aria-label="Progreso de la subsesión">
@@ -149,6 +175,12 @@
                         <p id="next-mission-hint" class="mt-2 text-xs" role="status">Tu misión actual aparecerá aquí.</p>
                     </section>
                     <div id="missions-container" class="missions-list"></div>
+                    <details id="understanding-panel" class="quick-help">
+                        <summary>Demuestra lo que aprendiste</summary>
+                        <p>Después de construir, responde en voz alta o en tu cuaderno. Tu docente revisará tu explicación; estas actividades no suman puntos automáticos.</p>
+                        <ol id="understanding-tasks" class="criteria-list"></ol>
+                        <p>Si trabajan en pareja: una escribe y otra predice y explica. Intercambien los roles en la siguiente actividad.</p>
+                    </details>
                     <section id="success-banner" class="session-success hidden" role="status"></section>
                     <details class="quick-help">
                         <summary>Ayudas rápidas</summary>
