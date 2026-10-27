@@ -373,15 +373,18 @@ export async function recordMissionCompletion(userId, completion) {
     if (user.id !== userId || !user.is_anonymous) {
         throw new Error('Solo la cuenta del estudiante puede registrar su avance.');
     }
-    const { error } = await getSupabase().from('mission_completions').upsert({
+    // ON CONFLICT con columnas también exige pasar la política SELECT, reservada
+    // al docente. INSERT sin retorno solo necesita la política de inserción propia.
+    const { error } = await getSupabase().from('mission_completions').insert({
         student_id: userId,
         session_id: completion.sessionId,
         project_id: completion.projectId,
         mission_id: completion.missionId
-    }, {
-        onConflict: 'student_id,session_id,project_id,mission_id',
-        ignoreDuplicates: true
     });
+    // Reintentos o repetir una actividad conservan la primera fecha de logro.
+    // No ocultar errores RLS, de red ni conflictos de otras restricciones.
+    if (error?.code === '23505'
+        && error.message?.includes('"mission_completions_student_mission_idx"')) return;
     throwIfError(error);
 }
 
