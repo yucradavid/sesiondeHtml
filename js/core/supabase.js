@@ -139,6 +139,40 @@ export async function enterClassroom(user, name, avatar) {
     };
 }
 
+// Mantiene las lecturas funcionando cuando WebSocket falla o pierde conexión.
+function realtimeReadFallback(publish, onError, label) {
+    let timer = null;
+    let stopped = false;
+    let reading = false;
+    const refresh = async () => {
+        if (stopped || reading) return;
+        reading = true;
+        try { await publish(); }
+        catch (error) { if (!stopped) onError?.(error); }
+        finally { reading = false; }
+    };
+    return {
+        refresh,
+        status(status) {
+            if (stopped) return;
+            if (status === 'SUBSCRIBED') {
+                if (timer !== null) clearInterval(timer);
+                timer = null;
+                void refresh();
+            } else if (['CHANNEL_ERROR', 'TIMED_OUT', 'CLOSED'].includes(status) && timer === null) {
+                timer = setInterval(() => void refresh(), 10000);
+                void refresh();
+                onError?.(new Error(`${label}: conexión en tiempo real interrumpida. Se consultarán los cambios cada 10 segundos mientras se reconecta.`));
+            }
+        },
+        stop() {
+            stopped = true;
+            if (timer !== null) clearInterval(timer);
+            timer = null;
+        }
+    };
+}
+
 export function watchClassControl(callback, onError) {
     const supabase = getSupabase();
     let channel;
@@ -158,16 +192,14 @@ export function watchClassControl(callback, onError) {
             : { active: false, sessionId: 'sesion1', projectId: 'all' });
     };
 
-    publish();
+    const fallback = realtimeReadFallback(publish, onError, 'Estado de la clase');
+    void fallback.refresh();
     channel = supabase.channel('classroom-control-updates')
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'classroom_control' }, publish)
-        .subscribe(status => {
-            if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-                onError?.(new Error(`No se pudo escuchar el estado de la clase: ${status}`));
-            }
-        });
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'classroom_control' }, fallback.refresh)
+        .subscribe(status => fallback.status(status));
     return () => {
         active = false;
+        fallback.stop();
         if (channel) supabase.removeChannel(channel);
     };
 }
@@ -190,21 +222,19 @@ export function watchHelpRequest(userId, callback, onError) {
             ? { status: data.status, teacherMessage: data.teacher_message }
             : null);
     };
-    publish();
+    const fallback = realtimeReadFallback(publish, onError, 'Respuesta del docente');
+    void fallback.refresh();
     channel = supabase.channel(`student-help-${userId}`)
         .on('postgres_changes', {
             event: '*',
             schema: 'public',
             table: 'help_requests',
             filter: `student_id=eq.${userId}`
-        }, publish)
-        .subscribe(status => {
-            if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-                onError?.(new Error(`No se pudo escuchar la respuesta del docente: ${status}`));
-            }
-        });
+        }, fallback.refresh)
+        .subscribe(status => fallback.status(status));
     return () => {
         active = false;
+        fallback.stop();
         if (channel) supabase.removeChannel(channel);
     };
 }
