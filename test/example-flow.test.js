@@ -6,6 +6,10 @@ import { readFileSync } from 'node:fs';
 test('observation stays outside practice, respects pause and saves the empty start', () => {
     const elements = new Map();
     const storage = new Map();
+    let rendered = '';
+    elements.set('preview-frame', { contentDocument: {
+        open() { rendered = ''; }, write(html) { rendered += html; }, close() {}, querySelectorAll() { return []; }
+    } });
     const context = vm.createContext({
         console,
         document: { getElementById(id) { if (!elements.has(id)) elements.set(id, {}); return elements.get(id); } },
@@ -26,13 +30,17 @@ test('observation stays outside practice, respects pause and saves the empty sta
     app.renderExample();
     assert.equal(elements.get('example-code').textContent, '<h1>Modelo</h1>');
     assert.equal(readOnly, true);
+    assert.match(rendered, /<h1>Modelo<\/h1>/);
+    assert.equal(elements.get('preview-frame').title, 'Vista previa del ejemplo');
     app.startPractice();
     assert.equal(app.observingExample, true);
     app.classControl.active = true;
     app.startPractice();
     assert.equal(elements.get('worked-example').hidden, true);
     assert.equal(elements.get('example-code').textContent, '');
-    assert.equal(elements.get('example-preview').srcdoc, '');
+    assert.doesNotMatch(rendered, /<h1>Modelo<\/h1>/);
+    assert.equal(elements.get('preview-frame').title, 'Vista previa de tu código');
+    assert.equal(elements.has('example-preview'), false);
     assert.equal(readOnly, false);
     assert.equal(focused, true);
     assert.equal(storage.get(app.codeKey(app.currentProject)), '');

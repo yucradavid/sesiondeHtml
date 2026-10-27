@@ -247,9 +247,8 @@ import { avatarStyles, createAvatarCharacter, createAvatarSeed, createAvatarValu
                 const savedCode = this.storedCode();
                 const code = savedCode ?? baseHTML;
                 this.observingExample = Boolean(this.currentProjectData?.exampleHTML && savedCode === null);
-                this.renderExample();
                 this.editor.setValue(code);
-                this.updateIframe(code);
+                this.renderExample();
                 this.updateRankUI();
             } finally {
                 this.loadingSession = false;
@@ -261,7 +260,9 @@ import { avatarStyles, createAvatarCharacter, createAvatarSeed, createAvatarValu
             panel.hidden = !this.observingExample;
             const code = this.observingExample ? this.currentProjectData.exampleHTML : '';
             document.getElementById('example-code').textContent = code;
-            document.getElementById('example-preview').srcdoc = code;
+            const frame = document.getElementById('preview-frame');
+            frame.title = this.observingExample ? 'Vista previa del ejemplo' : 'Vista previa de tu código';
+            this.updateIframe(this.observingExample ? code : this.editor.getValue());
             this.editor.setOption('readOnly', !this.studentId || !this.classControl.active || this.observingExample);
         },
 
